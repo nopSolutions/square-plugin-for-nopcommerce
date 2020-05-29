@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
-using System.Web;
+using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
 using Nop.Core;
 using Nop.Plugin.Payments.Square.Domain;
@@ -238,33 +238,12 @@ namespace Nop.Plugin.Payments.Square.Services
 
         #region Payment workflow
 
-        #region Nested class
-
-        /// <summary>
-        /// Represents payment response
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        public class PaymentResponse<T>
-        {
-            /// <summary>
-            /// Gets or sets a payment response value
-            /// </summary>
-            public T ResponseValue { get; set; }
-
-            /// <summary>
-            /// Gets or sets an error
-            /// </summary>
-            public string Error { get; set; }
-        }
-
-        #endregion
-
         /// <summary>
         /// Get transaction by transaction identifier
         /// </summary>
         /// <param name="transactionId">Transaction ID</param>
         /// <returns>Transaction and/or errors if exist</returns>
-        public PaymentResponse<Transaction> GetTransaction(string transactionId)
+        public (Transaction, string) GetTransaction(string transactionId)
         {
             try
             {
@@ -289,7 +268,7 @@ namespace Nop.Plugin.Payments.Square.Services
                     throw new NopException($"There are errors in the service response. {errorsMessage}");
                 }
 
-                return new PaymentResponse<Transaction>{ ResponseValue = retrieveTransactionResponse.Transaction };
+                return (retrieveTransactionResponse.Transaction, null);
             }
             catch (Exception exception)
             {
@@ -304,8 +283,8 @@ namespace Nop.Plugin.Payments.Square.Services
                     if (response?.Errors?.Any() ?? false)
                         errorMessage = string.Join(";", response.Errors.Select(error => error.Detail));
                 }
-                
-                return new PaymentResponse<Transaction> { Error = errorMessage };
+
+                return (null, errorMessage);
             }
         }
 
@@ -314,7 +293,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="chargeRequest">Request parameters to charge transaction</param>
         /// <returns>Transaction and/or errors if exist</returns>
-        public PaymentResponse<Transaction> Charge(ExtendedChargeRequest chargeRequest)
+        public (Transaction, string) Charge(ExtendedChargeRequest chargeRequest)
         {
             try
             {
@@ -339,7 +318,7 @@ namespace Nop.Plugin.Payments.Square.Services
                     throw new NopException($"There are errors in the service response. {errorsMessage}");
                 }
 
-                return new PaymentResponse<Transaction> { ResponseValue = chargeResponse.Transaction };
+                return (chargeResponse.Transaction, null);
             }
             catch (Exception exception)
             {
@@ -355,7 +334,7 @@ namespace Nop.Plugin.Payments.Square.Services
                         errorMessage = string.Join(";", response.Errors.Select(error => error.Detail));
                 }
 
-                return new PaymentResponse<Transaction> { Error = errorMessage };
+                return (null, errorMessage);
             }
         }
 
@@ -364,7 +343,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="transactionId">Transaction ID</param>
         /// <returns>True if the transaction successfully captured; otherwise false. And/or errors if exist</returns>
-        public PaymentResponse<bool> CaptureTransaction(string transactionId)
+        public (bool, string) CaptureTransaction(string transactionId)
         {
             try
             {
@@ -390,7 +369,7 @@ namespace Nop.Plugin.Payments.Square.Services
                 }
 
                 //if there are no errors in the response, transaction was successfully captured
-                return new PaymentResponse<bool> { ResponseValue = true };
+                return (true, null);
             }
             catch (Exception exception)
             {
@@ -406,7 +385,7 @@ namespace Nop.Plugin.Payments.Square.Services
                         errorMessage = string.Join(";", response.Errors.Select(error => error.Detail));
                 }
 
-                return new PaymentResponse<bool> { Error = errorMessage };
+                return (false, errorMessage);
             }
         }
 
@@ -415,7 +394,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="transactionId">Transaction ID</param>
         /// <returns>True if the transaction successfully voided; otherwise false. And/or errors if exist</returns>
-        public PaymentResponse<bool> VoidTransaction(string transactionId)
+        public (bool, string) VoidTransaction(string transactionId)
         {
             try
             {
@@ -441,7 +420,7 @@ namespace Nop.Plugin.Payments.Square.Services
                 }
 
                 //if there are no errors in the response, transaction was successfully voided
-                return new PaymentResponse<bool> { ResponseValue = true };
+                return (true, null);
             }
             catch (Exception exception)
             {
@@ -457,7 +436,7 @@ namespace Nop.Plugin.Payments.Square.Services
                         errorMessage = string.Join(";", response.Errors.Select(error => error.Detail));
                 }
 
-                return new PaymentResponse<bool> { Error = errorMessage };
+                return (false, errorMessage);
             }
         }
 
@@ -467,7 +446,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="transactionId">Transaction ID</param>
         /// <param name="refundRequest">Request parameters to create refund</param>
         /// <returns>Refund and/or errors if exist</returns>
-        public PaymentResponse<Refund> CreateRefund(string transactionId, CreateRefundRequest refundRequest)
+        public (Refund, string) CreateRefund(string transactionId, CreateRefundRequest refundRequest)
         {
             try
             {
@@ -492,7 +471,7 @@ namespace Nop.Plugin.Payments.Square.Services
                     throw new NopException($"There are errors in the service response. {errorsMessage}");
                 }
 
-                return new PaymentResponse<Refund> { ResponseValue = createRefundResponse.Refund };
+                return (createRefundResponse.Refund, null);
             }
             catch (Exception exception)
             {
@@ -508,7 +487,7 @@ namespace Nop.Plugin.Payments.Square.Services
                         errorMessage = string.Join(";", response.Errors.Select(error => error.Detail));
                 }
 
-                return new PaymentResponse<Refund> { Error = errorMessage };
+                return (null, errorMessage);
             }
         }
 
@@ -578,35 +557,33 @@ namespace Nop.Plugin.Payments.Square.Services
             var requestingPermissions = string.Join(" ", permissionScopes);
 
             //create query parameters for the request
-            var uriBuilder = new UriBuilder(serviceUrl);
-            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
-            
-            //The application ID.
-            query["client_id"] = _squarePaymentSettings.ApplicationId;
+            var queryParameters = new Dictionary<string, string>
+            {
+                //The application ID.
+                ["client_id"] = _squarePaymentSettings.ApplicationId,
 
-            //Indicates whether you want to receive an authorization code ("code") or an access token ("token").
-            query["response_type"] = "code";
+                //Indicates whether you want to receive an authorization code ("code") or an access token ("token").
+                ["response_type"] = "code",
 
-            //A space-separated list of the permissions your application is requesting. 
-            query["scope"] = requestingPermissions;
+                //A space-separated list of the permissions your application is requesting. 
+                ["scope"] = requestingPermissions,
 
-            //The locale to present the Permission Request form in. Currently supported values are en-US, en-CA, es-US, fr-CA, and ja-JP.
-            //query["locale"] = string.Empty;
+                //The locale to present the Permission Request form in. Currently supported values are en-US, en-CA, es-US, fr-CA, and ja-JP.
+                //["locale"] = string.Empty,
 
-            //If "false", the Square merchant must log in to view the Permission Request form, even if they already have a valid user session.
-            query["session"] = "false";
+                //If "false", the Square merchant must log in to view the Permission Request form, even if they already have a valid user session.
+                ["session"] = "false",
 
-            //Include this parameter and verify its value to help protect against cross-site request forgery.
-            query["state"] = verificationString;
+                //Include this parameter and verify its value to help protect against cross-site request forgery.
+                ["state"] = verificationString,
 
-            //The ID of the subscription plan to direct the merchant to sign up for, if any.
-            //You can provide this parameter with no value to give a merchant the option to cancel an active subscription.
-            //query["plan_id"] = string.Empty;
-
-            uriBuilder.Query = query.ToString();
+                //The ID of the subscription plan to direct the merchant to sign up for, if any.
+                //You can provide this parameter with no value to give a merchant the option to cancel an active subscription.
+                //["plan_id"] = string.Empty,
+            };
 
             //return generated URL
-            return uriBuilder.ToString();
+            return QueryHelpers.AddQueryString(serviceUrl, queryParameters);
         }
 
         /// <summary>

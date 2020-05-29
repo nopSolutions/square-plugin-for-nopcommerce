@@ -1,6 +1,6 @@
-﻿using System.Web.Mvc;
-using System.Web.Routing;
-using Nop.Web.Framework.Mvc.Routes;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Nop.Web.Framework.Mvc.Routing;
 
 namespace Nop.Plugin.Payments.Square.Infrastructure
 {
@@ -9,13 +9,12 @@ namespace Nop.Plugin.Payments.Square.Infrastructure
         /// <summary>
         /// Register routes
         /// </summary>
-        /// <param name="routes">Routes</param>
-        public void RegisterRoutes(RouteCollection routes)
+        /// <param name="routeBuilder">Route builder</param>
+        public void RegisterRoutes(IRouteBuilder routeBuilder)
         {
             //add route for the access token callback
-            routes.MapRoute(SquarePaymentDefaults.AccessTokenRoute,
-                 "Plugins/PaymentSquare/AccessToken/", new { controller = "PaymentSquare", action = "AccessTokenCallback" },
-                 new[] { "Nop.Plugin.Payments.Square.Controllers" });
+            routeBuilder.MapRoute(SquarePaymentDefaults.AccessTokenRoute, 
+                "Plugins/PaymentSquare/AccessToken/", new { controller = "PaymentSquare", action = "AccessTokenCallback" });
         }
 
         /// <summary>

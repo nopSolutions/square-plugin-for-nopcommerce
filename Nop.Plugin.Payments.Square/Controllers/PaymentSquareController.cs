@@ -1,19 +1,19 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.Extensions.Primitives;
 using Nop.Core;
-using Nop.Core.Domain.Customers;
 using Nop.Plugin.Payments.Square.Domain;
 using Nop.Plugin.Payments.Square.Models;
 using Nop.Plugin.Payments.Square.Services;
 using Nop.Services;
-using Nop.Services.Common;
 using Nop.Services.Configuration;
 using Nop.Services.Localization;
-using Nop.Services.Payments;
 using Nop.Services.Security;
+using Nop.Web.Framework;
 using Nop.Web.Framework.Controllers;
+using Nop.Web.Framework.Mvc.Filters;
 
 namespace Nop.Plugin.Payments.Square.Controllers
 {
@@ -24,7 +24,6 @@ namespace Nop.Plugin.Payments.Square.Controllers
         private readonly ILocalizationService _localizationService;
         private readonly IPermissionService _permissionService;
         private readonly ISettingService _settingService;
-        private readonly IWorkContext _workContext;
         private readonly SquarePaymentManager _squarePaymentManager;
         private readonly SquarePaymentSettings _squarePaymentSettings;
 
@@ -35,14 +34,12 @@ namespace Nop.Plugin.Payments.Square.Controllers
         public PaymentSquareController(ILocalizationService localizationService,
             IPermissionService permissionService,
             ISettingService settingService,
-            IWorkContext workContext,
             SquarePaymentManager squarePaymentManager,
             SquarePaymentSettings squarePaymentSettings)
         {
             this._localizationService = localizationService;
             this._permissionService = permissionService;
             this._settingService = settingService;
-            this._workContext = workContext;
             this._squarePaymentManager = squarePaymentManager;
             this._squarePaymentSettings = squarePaymentSettings;
         }
@@ -51,10 +48,14 @@ namespace Nop.Plugin.Payments.Square.Controllers
 
         #region Methods
 
-        [AdminAuthorize]
-        [ChildActionOnly]
-        public ActionResult Configure()
+        [AuthorizeAdmin]
+        [Area(AreaNames.Admin)]
+        public IActionResult Configure()
         {
+            //whether user has the authority
+            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+                return AccessDeniedView();
+
             //prepare model
             var model = new ConfigurationModel
             {
@@ -93,10 +94,15 @@ namespace Nop.Plugin.Payments.Square.Controllers
 
         [HttpPost, ActionName("Configure")]
         [FormValueRequired("save")]
-        [AdminAuthorize]
-        [ChildActionOnly]
-        public ActionResult Configure(ConfigurationModel model)
+        [AuthorizeAdmin]
+        [AdminAntiForgery]
+        [Area(AreaNames.Admin)]
+        public IActionResult Configure(ConfigurationModel model)
         {
+            //whether user has the authority
+            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+                return AccessDeniedView();
+
             if (!ModelState.IsValid)
                 return Configure();
 
@@ -119,10 +125,18 @@ namespace Nop.Plugin.Payments.Square.Controllers
 
             return Configure();
         }
-        
-        [HttpPost]
-        public ActionResult ObtainAccessToken()
+
+        [HttpPost, ActionName("Configure")]
+        [FormValueRequired("obtainAccessToken")]
+        [AuthorizeAdmin]
+        [AdminAntiForgery]
+        [Area(AreaNames.Admin)]
+        public IActionResult ObtainAccessToken(ConfigurationModel model)
         {
+            //whether user has the authority
+            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+                return AccessDeniedView();
+
             //create new verification string
             _squarePaymentSettings.AccessTokenVerificationString = Guid.NewGuid().ToString();
             _settingService.SaveSetting(_squarePaymentSettings);
@@ -130,119 +144,10 @@ namespace Nop.Plugin.Payments.Square.Controllers
             //get the URL to directs a Square merchant's web browser
             var redirectUrl = _squarePaymentManager.GenerateAuthorizeUrl(_squarePaymentSettings.AccessTokenVerificationString);
 
-            return Json(new { url = redirectUrl });
+            return Redirect(redirectUrl);
         }
 
-        [HttpPost, ActionName("Configure")]
-        [FormValueRequired("revokeAccessTokens")]
-        [AdminAuthorize]
-        [ChildActionOnly]
-        public ActionResult RevokeAccessTokens(ConfigurationModel model)
-        {
-            try
-            {
-                //try to revoke all access tokens
-                var successfullyRevoked = _squarePaymentManager.RevokeAccessTokens(new RevokeAccessTokenRequest
-                {
-                    ApplicationId = _squarePaymentSettings.ApplicationId,
-                    ApplicationSecret = _squarePaymentSettings.ApplicationSecret,
-                    AccessToken = _squarePaymentSettings.AccessToken
-                });
-                if (!successfullyRevoked)
-                    throw new NopException("Tokens were not revoked");
-
-                //if access token successfully revoked, delete it from the settings
-                _squarePaymentSettings.AccessToken = string.Empty;
-                _settingService.SaveSetting(_squarePaymentSettings);
-
-                SuccessNotification(_localizationService.GetResource("Plugins.Payments.Square.RevokeAccessTokens.Success"));
-            }
-            catch (Exception exception)
-            {
-                ErrorNotification(_localizationService.GetResource("Plugins.Payments.Square.RevokeAccessTokens.Error"));
-                if (!string.IsNullOrEmpty(exception.Message))
-                    ErrorNotification(exception.Message);
-            }
-
-            return Configure();
-        }
-
-        [ChildActionOnly]
-        public ActionResult PaymentInfo()
-        {
-            var model = new PaymentInfoModel
-            {
-
-                //whether current customer is guest
-                IsGuest = _workContext.CurrentCustomer.IsGuest(),
-
-                //get postal code from the billing address or from the shipping one
-                PostalCode = _workContext.CurrentCustomer.BillingAddress?.ZipPostalCode
-                ?? _workContext.CurrentCustomer.ShippingAddress?.ZipPostalCode
-            };
-
-            //whether customer already has stored cards
-            var customerId = _workContext.CurrentCustomer.GetAttribute<string>(SquarePaymentDefaults.CustomerIdAttribute);
-            var customer = _squarePaymentManager.GetCustomer(customerId);
-            if (customer?.Cards != null)
-            {
-                var cardNumberMask = _localizationService.GetResource("Plugins.Payments.Square.Fields.StoredCard.Mask");
-                model.StoredCards = customer.Cards.Select(card => new SelectListItem { Text = string.Format(cardNumberMask, card.Last4), Value = card.Id }).ToList();
-            }
-
-            //add the special item for 'select card' with value 0
-            if (model.StoredCards.Any())
-            {
-                var selectCardText = _localizationService.GetResource("Plugins.Payments.Square.Fields.StoredCard.SelectCard");
-                model.StoredCards.Insert(0, new SelectListItem { Text = selectCardText, Value = "0" });
-            }
-
-            return View("~/Plugins/Payments.Square/Views/PaymentInfo.cshtml", model);
-        }
-
-        [NonAction]
-        public override IList<string> ValidatePaymentForm(FormCollection form)
-        {
-            //try to get errors
-            var errors = form["Errors"];
-            if (!string.IsNullOrEmpty(errors))
-                return errors.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-
-            return new List<string>();
-        }
-
-        [NonAction]
-        public override ProcessPaymentRequest GetPaymentInfo(FormCollection form)
-        {
-            var paymentRequest = new ProcessPaymentRequest();
-
-            //pass custom values to payment processor
-            var cardNonce = form["CardNonce"];
-            if (!string.IsNullOrEmpty(cardNonce))
-                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.CardNonce.Key"), cardNonce);
-
-            var storedCardId = form["StoredCardId"];
-            if (!string.IsNullOrEmpty(storedCardId) && !storedCardId.Equals("0"))
-                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.StoredCard.Key"), storedCardId);
-
-            var saveCardValue = form["SaveCard"];
-            if (!string.IsNullOrEmpty(saveCardValue) && bool.TryParse(saveCardValue.Split(',').FirstOrDefault(), out bool saveCard) && saveCard)
-                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.SaveCard.Key"), saveCard);
-
-            var postalCode = form["PostalCode"];
-            if (!string.IsNullOrEmpty(postalCode))
-                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.PostalCode.Key"), postalCode);
-
-            return paymentRequest;
-        }
-
-        [ChildActionOnly]
-        public ActionResult OnePageCheckoutScript()
-        {
-            return View("~/Plugins/Payments.Square/Views/OnePageCheckoutScript.cshtml");
-        }
-
-        public ActionResult AccessTokenCallback()
+        public IActionResult AccessTokenCallback()
         {
             //handle access token callback
             try
@@ -251,19 +156,18 @@ namespace Nop.Plugin.Payments.Square.Controllers
                     throw new NopException("Plugin is not configured");
 
                 //check whether there are errors in the request
-                var error = this.Request.QueryString["error"];
-                var errorDescription = this.Request.QueryString["error_description"];
-                if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(errorDescription))
+                if (this.Request.Query.TryGetValue("error", out StringValues error) |
+                    this.Request.Query.TryGetValue("error_description", out StringValues errorDescription))
+                {
                     throw new NopException($"{error} - {errorDescription}");
+                }
 
                 //validate verification string
-                var verificationString = this.Request.QueryString["state"];
-                if (string.IsNullOrEmpty(verificationString) || !verificationString.Equals(_squarePaymentSettings.AccessTokenVerificationString))
+                if (!this.Request.Query.TryGetValue("state", out StringValues verificationString) || !verificationString.Equals(_squarePaymentSettings.AccessTokenVerificationString))
                     throw new NopException("The verification string did not pass the validation");
 
                 //check whether there is an authorization code in the request
-                var authorizationCode = this.Request.QueryString["code"];
-                if (string.IsNullOrEmpty(authorizationCode))
+                if (!this.Request.Query.TryGetValue("code", out StringValues authorizationCode))
                     throw new NopException("No service response");
 
                 //exchange the authorization code for an access token
@@ -291,8 +195,46 @@ namespace Nop.Plugin.Payments.Square.Controllers
                     ErrorNotification(exception.Message);
             }
 
-            //we cannot redirect to the Configure action since it is only for child requests, so redirect to the Payment.ConfigureMethod
-            return RedirectToAction("ConfigureMethod", "Payment", new { systemName = SquarePaymentDefaults.SystemName, area = "admin" });
+            return RedirectToAction("Configure", "PaymentSquare", new { area = AreaNames.Admin });
+        }
+
+        [HttpPost, ActionName("Configure")]
+        [FormValueRequired("revokeAccessTokens")]
+        [AuthorizeAdmin]
+        [AdminAntiForgery]
+        [Area(AreaNames.Admin)]
+        public IActionResult RevokeAccessTokens(ConfigurationModel model)
+        {
+            //whether user has the authority
+            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+                return AccessDeniedView();
+
+            try
+            {
+                //try to revoke all access tokens
+                var successfullyRevoked = _squarePaymentManager.RevokeAccessTokens(new RevokeAccessTokenRequest
+                {
+                    ApplicationId = _squarePaymentSettings.ApplicationId,
+                    ApplicationSecret = _squarePaymentSettings.ApplicationSecret,
+                    AccessToken = _squarePaymentSettings.AccessToken
+                });
+                if (!successfullyRevoked)
+                    throw new NopException("Tokens were not revoked");
+
+                //if access token successfully revoked, delete it from the settings
+                _squarePaymentSettings.AccessToken = string.Empty;
+                _settingService.SaveSetting(_squarePaymentSettings);
+
+                SuccessNotification(_localizationService.GetResource("Plugins.Payments.Square.RevokeAccessTokens.Success"));
+            }
+            catch (Exception exception)
+            {
+                ErrorNotification(_localizationService.GetResource("Plugins.Payments.Square.RevokeAccessTokens.Error"));
+                if (!string.IsNullOrEmpty(exception.Message))
+                    ErrorNotification(exception.Message);
+            }
+
+            return Configure();
         }
 
         #endregion

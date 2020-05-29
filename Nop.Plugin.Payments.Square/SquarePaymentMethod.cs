@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.Routing;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Primitives;
 using Nop.Core;
 using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
@@ -10,10 +11,8 @@ using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Payments;
 using Nop.Core.Domain.Tasks;
 using Nop.Core.Plugins;
-using Nop.Plugin.Payments.Square.Controllers;
 using Nop.Plugin.Payments.Square.Domain;
 using Nop.Plugin.Payments.Square.Services;
-using Nop.Services.Cms;
 using Nop.Services.Common;
 using Nop.Services.Configuration;
 using Nop.Services.Customers;
@@ -31,7 +30,7 @@ namespace Nop.Plugin.Payments.Square
     /// <summary>
     /// Represents Square payment method
     /// </summary>
-    public class SquarePaymentMethod : BasePlugin, IPaymentMethod, IWidgetPlugin
+    public class SquarePaymentMethod : BasePlugin, IPaymentMethod
     {
         #region Fields
 
@@ -124,12 +123,11 @@ namespace Nop.Plugin.Payments.Square
             var chargeRequest = CreateChargeRequest(paymentRequest, isRecurringPayment);
 
             //charge transaction
-            var response = _squarePaymentManager.Charge(chargeRequest);
-            if (response?.ResponseValue == null)
-                throw new NopException(response?.Error);
+            var (transaction, error) = _squarePaymentManager.Charge(chargeRequest);
+            if (transaction == null)
+                throw new NopException(error);
 
             //get transaction tender
-            var transaction = response.ResponseValue;
             var tender = transaction.Tenders?.FirstOrDefault();
             if (tender == null)
                 throw new NopException("There are no tenders (methods of payment) used to pay in the transaction");
@@ -390,9 +388,9 @@ namespace Nop.Plugin.Payments.Square
 
             //capture transaction
             var transactionId = capturePaymentRequest.Order.AuthorizationTransactionId;
-            var response = _squarePaymentManager.CaptureTransaction(transactionId);
-            if (!response?.ResponseValue ?? true)
-                throw new NopException(response?.Error);
+            var (successfullyCaptured, error) = _squarePaymentManager.CaptureTransaction(transactionId);
+            if (!successfullyCaptured)
+                throw new NopException(error);
 
             //successfully captured
             return new CapturePaymentResult
@@ -428,12 +426,11 @@ namespace Nop.Plugin.Payments.Square
 
             //first try to get the transaction
             var transactionId = refundPaymentRequest.Order.CaptureTransactionId;
-            var response = _squarePaymentManager.GetTransaction(transactionId);
-            if (response?.ResponseValue == null)
-                throw new NopException(response?.Error);
+            var (transaction, transactionError) = _squarePaymentManager.GetTransaction(transactionId);
+            if (transaction == null)
+                throw new NopException(transactionError);
 
             //get tender
-            var transaction = response.ResponseValue;
             var tender = transaction.Tenders?.FirstOrDefault();
             if (tender == null)
                 throw new NopException("There are no tenders (methods of payment) used to pay in the transaction");
@@ -445,19 +442,16 @@ namespace Nop.Plugin.Payments.Square
                 IdempotencyKey: Guid.NewGuid().ToString(),
                 TenderId: tender.Id
             );
-            var refundResponse = _squarePaymentManager.CreateRefund(transactionId, refundRequest);
-            if (refundResponse?.ResponseValue == null)
-                throw new NopException(refundResponse?.Error);
+            var (createdRefund, refundError) = _squarePaymentManager.CreateRefund(transactionId, refundRequest);
+            if (createdRefund == null)
+                throw new NopException(refundError);
 
             //if refund status is 'pending', try to refund once more with the same request parameters
-            var createdRefund = refundResponse.ResponseValue;
             if (createdRefund.Status == SquareModel.Refund.StatusEnum.PENDING)
             {
-                refundResponse = _squarePaymentManager.CreateRefund(transactionId, refundRequest);
-                if (refundResponse?.ResponseValue == null)
-                    throw new NopException(refundResponse?.Error);
-
-                createdRefund = refundResponse.ResponseValue;
+                (createdRefund, refundError) = _squarePaymentManager.CreateRefund(transactionId, refundRequest);
+                if (createdRefund == null)
+                    throw new NopException(refundError);
             }
 
             //check whether refund is approved
@@ -465,7 +459,7 @@ namespace Nop.Plugin.Payments.Square
             {
                 //change error notification to warning one (for the pending status)
                 if (createdRefund.Status == SquareModel.Refund.StatusEnum.PENDING)
-                    _pageHeadBuilder.AddCssFileParts(ResourceLocation.Head, @"~/Plugins/Payments.Square/Content/styles.css");
+                    _pageHeadBuilder.AddCssFileParts(ResourceLocation.Head, @"~/Plugins/Payments.Square/Content/styles.css", null);
 
                 return new RefundPaymentResult { Errors = new[] { $"Refund is {createdRefund.Status}" }.ToList() };
             }
@@ -489,9 +483,9 @@ namespace Nop.Plugin.Payments.Square
 
             //void transaction
             var transactionId = voidPaymentRequest.Order.AuthorizationTransactionId;
-            var response = _squarePaymentManager.VoidTransaction(transactionId);
-            if (!response?.ResponseValue ?? true)
-                throw new NopException(response?.Error);
+            var (successfullyVoided, error) = _squarePaymentManager.VoidTransaction(transactionId);
+            if (!successfullyVoided)
+                throw new NopException(error);
 
             //successfully voided
             return new VoidPaymentResult
@@ -542,61 +536,59 @@ namespace Nop.Plugin.Payments.Square
         }
 
         /// <summary>
-        /// Gets a route for provider configuration
+        /// Validate payment form
         /// </summary>
-        /// <param name="actionName">Action name</param>
-        /// <param name="controllerName">Controller name</param>
-        /// <param name="routeValues">Route values</param>
-        public void GetConfigurationRoute(out string actionName, out string controllerName, out RouteValueDictionary routeValues)
+        /// <param name="form">The parsed form values</param>
+        /// <returns>List of validating errors</returns>
+        public IList<string> ValidatePaymentForm(IFormCollection form)
         {
-            actionName = "Configure";
-            controllerName = "PaymentSquare";
-            routeValues = new RouteValueDictionary { { "Namespaces", "Nop.Plugin.Payments.Square.Controllers" }, { "area", null } };
+            //try to get errors
+            if (form.TryGetValue("Errors", out StringValues errorsString) && !StringValues.IsNullOrEmpty(errorsString))
+                return errorsString.ToString().Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+            return new List<string>();
         }
 
         /// <summary>
-        /// Gets a route for payment info
+        /// Get payment information
         /// </summary>
-        /// <param name="actionName">Action name</param>
-        /// <param name="controllerName">Controller name</param>
-        /// <param name="routeValues">Route values</param>
-        public void GetPaymentInfoRoute(out string actionName, out string controllerName, out RouteValueDictionary routeValues)
+        /// <param name="form">The parsed form values</param>
+        /// <returns>Payment info holder</returns>
+        public ProcessPaymentRequest GetPaymentInfo(IFormCollection form)
         {
-            actionName = "PaymentInfo";
-            controllerName = "PaymentSquare";
-            routeValues = new RouteValueDictionary { { "Namespaces", "Nop.Plugin.Payments.Square.Controllers" }, { "area", null } };
+            var paymentRequest = new ProcessPaymentRequest();
+
+            //pass custom values to payment processor
+            if (form.TryGetValue("CardNonce", out StringValues cardNonce) && !StringValues.IsNullOrEmpty(cardNonce))
+                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.CardNonce.Key"), cardNonce.ToString());
+
+            if (form.TryGetValue("StoredCardId", out StringValues storedCardId) && !StringValues.IsNullOrEmpty(storedCardId) && !storedCardId.Equals("0"))
+                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.StoredCard.Key"), storedCardId.ToString());
+
+            if (form.TryGetValue("SaveCard", out StringValues saveCardValue) && !StringValues.IsNullOrEmpty(saveCardValue) && bool.TryParse(saveCardValue[0], out bool saveCard) && saveCard)
+                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.SaveCard.Key"), saveCard);
+
+            if (form.TryGetValue("PostalCode", out StringValues postalCode) && !StringValues.IsNullOrEmpty(postalCode))
+                paymentRequest.CustomValues.Add(_localizationService.GetResource("Plugins.Payments.Square.Fields.PostalCode.Key"), postalCode.ToString());
+
+            return paymentRequest;
         }
 
         /// <summary>
-        /// Gets a route for displaying widget
+        /// Gets a configuration page URL
         /// </summary>
-        /// <param name="widgetZone">Widget zone where it's displayed</param>
-        /// <param name="actionName">Action name</param>
-        /// <param name="controllerName">Controller name</param>
-        /// <param name="routeValues">Route values</param>
-        public void GetDisplayWidgetRoute(string widgetZone, out string actionName, out string controllerName, out RouteValueDictionary routeValues)
+        public override string GetConfigurationPageUrl()
         {
-            actionName = "OnePageCheckoutScript";
-            controllerName = "PaymentSquare";
-            routeValues = new RouteValueDictionary { { "Namespaces", "Nop.Plugin.Payments.Square.Controllers" }, { "area", null } };
+            return $"{_webHelper.GetStoreLocation()}Admin/PaymentSquare/Configure";
         }
 
         /// <summary>
-        /// Get type of controller
+        /// Gets a view component for displaying plugin in public store ("payment info" checkout step)
         /// </summary>
-        /// <returns>Type</returns>
-        public Type GetControllerType()
+        /// <param name="viewComponentName">View component name</param>
+        public void GetPublicViewComponent(out string viewComponentName)
         {
-            return typeof(PaymentSquareController);
-        }
-
-        /// <summary>
-        /// Gets widget zones where this widget should be rendered
-        /// </summary>
-        /// <returns>Widget zones</returns>
-        public IList<string> GetWidgetZones()
-        {
-            return new List<string> { "opc_content_before" };
+            viewComponentName = "PaymentSquare";
         }
 
         /// <summary>

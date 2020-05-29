@@ -1,9 +1,7 @@
 using Autofac;
-using Nop.Admin.Controllers;
 using Nop.Core.Configuration;
 using Nop.Core.Infrastructure;
 using Nop.Core.Infrastructure.DependencyManagement;
-using Nop.Plugin.Payments.Square.Controllers;
 using Nop.Plugin.Payments.Square.Services;
 
 namespace Nop.Plugin.Payments.Square.Infrastructure
@@ -23,11 +21,6 @@ namespace Nop.Plugin.Payments.Square.Infrastructure
         {
             //register SquarePaymentManager
             builder.RegisterType<SquarePaymentManager>().AsSelf().InstancePerLifetimeScope();
-
-            //register overridden controllers
-            builder.RegisterType<OverriddenPaymentController>().As<PaymentController>().InstancePerLifetimeScope();
-            builder.RegisterType<OverriddenScheduleTaskController>().As<ScheduleTaskController>().InstancePerLifetimeScope();
-            builder.RegisterType<OverriddenWidgetController>().As<WidgetController>().InstancePerDependency();
         }
 
         /// <summary>

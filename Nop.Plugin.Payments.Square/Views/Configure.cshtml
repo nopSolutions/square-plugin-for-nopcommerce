@@ -1,21 +1,16 @@
-﻿@model ConfigurationModel
-
-@using Nop.Web.Framework;
-@using Nop.Plugin.Payments.Square
-@using Nop.Plugin.Payments.Square.Models
-
+﻿@model Nop.Plugin.Payments.Square.Models.ConfigurationModel
 @{
-    Layout = "";
+    Layout = "_ConfigurePlugin";
 }
 
-<script>
+<script type="text/javascript">
     $(document).ready(function () {
-        $('#@Html.FieldIdFor(model => model.UseSandbox)').click(toggleUseSandbox);
+        $('#@Html.IdFor(model => model.UseSandbox)').click(toggleUseSandbox);
         toggleUseSandbox();
     });
 
     function toggleUseSandbox() {
-        if ($('#@Html.FieldIdFor(model => model.UseSandbox)').is(':checked')) {
+        if ($('#@Html.IdFor(model => model.UseSandbox)').is(':checked')) {
             $('#groupApplicationSecret').hide();
             $('#liveAccessToken').hide();
             $('#sandboxAccessToken').show();
@@ -31,119 +26,100 @@
     }
 </script>
 
-@using (Html.BeginForm())
-{
-    @Html.AntiForgeryToken()
+<form asp-controller="PaymentSquare" asp-action="Configure" method="post">
     <div class="panel-group">
         <div class="panel panel-default">
             <div class="panel-body">
-                @Html.Raw(string.Format(T("Plugins.Payments.Square.Instructions").Text, Url.RouteUrl(SquarePaymentDefaults.AccessTokenRoute, null, "https")))
+                @Html.Raw(string.Format(T("Plugins.Payments.Square.Instructions").Text, Url.RouteUrl(SquarePaymentDefaults.AccessTokenRoute, null, Context.Request.Scheme)))
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.UseSandbox)
+                        <nop-label asp-for="UseSandbox" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.UseSandbox)
-                        @Html.ValidationMessageFor(model => model.UseSandbox)
+                        <nop-editor asp-for="UseSandbox" />
+                        <span asp-validation-for="UseSandbox"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3" id="sandboxApplicationId">
-                        @Html.NopLabelFor(model => model.SandboxApplicationId)
+                        <nop-label asp-for="SandboxApplicationId" />
                     </div>
                     <div class="col-md-3" id="liveApplicationId">
-                        @Html.NopLabelFor(model => model.ApplicationId)
+                        <nop-label asp-for="ApplicationId" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.ApplicationId, required: true)
-                        @Html.ValidationMessageFor(model => model.ApplicationId)
+                        <nop-editor asp-for="ApplicationId" asp-required="true" />
+                        <span asp-validation-for="ApplicationId"></span>
                     </div>
                 </div>
                 <div class="form-group" id="groupApplicationSecret">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.ApplicationSecret)
+                        <nop-label asp-for="ApplicationSecret" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.ApplicationSecret, required: true)
-                        @Html.ValidationMessageFor(model => model.ApplicationSecret)
+                        <nop-editor asp-for="ApplicationSecret" asp-required="true" />
+                        <span asp-validation-for="ApplicationSecret"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.LocationId)
+                        <nop-label asp-for="LocationId" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopDropDownListFor(model => model.LocationId, Model.Locations, required: true)
-                        @Html.ValidationMessageFor(model => model.LocationId)
+                        <nop-select asp-for="LocationId" asp-items="Model.Locations" asp-required="true" />                         
+                        <span asp-validation-for="LocationId"></span>
                     </div>
                 </div>
                 <div class="form-group" id="sandboxAccessToken">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.SandboxAccessToken)
+                        <nop-label asp-for="SandboxAccessToken" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.AccessToken, required: true)
-                        @Html.ValidationMessageFor(model => model.AccessToken)
+                        <nop-editor asp-for="AccessToken" asp-required="true" />
+                        <span asp-validation-for="AccessToken"></span>
                     </div>
-                </div>                
+                </div>
                 <div class="form-group" id="liveAccessToken">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.AccessToken)
+                        <nop-label asp-for="AccessToken" />
                     </div>
                     <div class="col-md-9">
                         <div class="input-group input-group-required">
-                            <div class="form-text-row">@(new string('*', 10))</div>
+                            <div class="form-text-row">@(new string('*', Model.AccessToken?.Length ?? 0))</div>
                             <div class="input-group-btn">
-                                <button type="button" id="obtainAccessToken" class="btn btn-info">
+                                <button type="submit" name="obtainAccessToken" class="btn btn-info">
                                     @T("Plugins.Payments.Square.ObtainAccessToken")
                                 </button>
-                                @Html.RequiredHint()
-
-                                <script type="text/javascript">
-                                    $(document).ready(function () {
-                                        $('#obtainAccessToken').click(function () {
-                                            $.ajax({
-                                                cache: false,
-                                                type: "POST",
-                                                url: "@(Url.Action("ObtainAccessToken"))",
-                                                success: function(data) {
-                                                    if (data.url) {
-                                                        location.href = data.url;
-                                                    }
-                                                }
-                                            });
-                                        });
-                                    });
-                                </script>
+                                <nop-required />
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.TransactionModeId)
+                        <nop-label asp-for="TransactionModeId" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopDropDownListFor(model => model.TransactionModeId, Model.TransactionModes)
-                        @Html.ValidationMessageFor(model => model.TransactionModeId)
+                        <nop-select asp-for="TransactionModeId" asp-items="Model.TransactionModes" />
+                        <span asp-validation-for="TransactionModeId"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.AdditionalFee)
+                        <nop-label asp-for="AdditionalFee" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.AdditionalFee)
-                        @Html.ValidationMessageFor(model => model.AdditionalFee)
+                        <nop-editor asp-for="AdditionalFee" />
+                        <span asp-validation-for="AdditionalFee"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.AdditionalFeePercentage)
+                        <nop-label asp-for="AdditionalFeePercentage" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.AdditionalFeePercentage)
-                        @Html.ValidationMessageFor(model => model.AdditionalFeePercentage)
+                        <nop-editor asp-for="AdditionalFeePercentage" />
+                        <span asp-validation-for="AdditionalFeePercentage"></span>
                     </div>
                 </div>
                 <div class="form-group">
@@ -153,8 +129,8 @@
                                 <input type="submit" name="save" class="btn btn-primary" value="@T("Admin.Common.Save")" />
                             </div>
                             @if (!Model.UseSandbox &&
-                                !string.IsNullOrEmpty(Model.ApplicationId) &&
-                                !string.IsNullOrEmpty(Model.ApplicationSecret) &&
+                                !string.IsNullOrEmpty(Model.ApplicationId) && 
+                                !string.IsNullOrEmpty(Model.ApplicationSecret) && 
                                 !string.IsNullOrEmpty(Model.AccessToken))
                             {
                                 <div class="input-group-btn">
@@ -169,4 +145,4 @@
             </div>
         </div>
     </div>
-}
+</form>

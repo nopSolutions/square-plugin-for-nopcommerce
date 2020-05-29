@@ -13,7 +13,7 @@ namespace Nop.Plugin.Payments.Square.Services
     /// <summary>
     /// Represents a schedule task to renew the access token
     /// </summary>
-    public class RenewAccessTokenTask : ITask
+    public class RenewAccessTokenTask : IScheduleTask
     {
         #region Fields
 
