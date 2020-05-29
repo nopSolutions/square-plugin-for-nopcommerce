@@ -1,0 +1,195 @@
+﻿@model PaymentInfoModel
+
+@using Nop.Core.Infrastructure
+@using Nop.Core.Domain.Orders
+@using Nop.Plugin.Payments.Square
+@using Nop.Plugin.Payments.Square.Models
+@using Nop.Web.Framework
+@using Nop.Web.Framework.UI
+
+@{
+    Layout = "";
+    Html.AddScriptParts(SquarePaymentDefaults.PaymentFormScriptPath, excludeFromBundle: true);
+    var squarePaymentSettings = EngineContext.Current.Resolve<SquarePaymentSettings>();
+    var orderSettings = EngineContext.Current.Resolve<OrderSettings>();
+}
+
+<style type="text/css">
+    .square-input {
+        height: 36px;
+        border: 1px solid #ddd;
+        padding: 8px;
+        vertical-align: middle;
+        color: #777;
+    }
+
+    select.square-input {
+        width: 100%;
+    }
+
+    .square-input--focus {
+        border-color: #ccc;
+        color: #444;
+    }
+
+    .square-input--error {
+        outline: #e4434b;
+    }
+</style>
+
+<script>
+    $(document).ready(function () {
+        $('#@Html.FieldIdFor(model => model.StoredCardId)').change(toggleStoredCard);
+        toggleStoredCard();
+
+        var submitForm = false;
+        var onePageCheckout = @orderSettings.OnePageCheckoutEnabled.ToString().ToLower();
+        $('.payment-info-next-step-button').attr('onclick', null);
+        $('.payment-info-next-step-button').prop('disabled', true);
+        $('.payment-info-next-step-button').css("opacity", .3);
+
+        var paymentForm = new SqPaymentForm({
+            applicationId: '@squarePaymentSettings.ApplicationId',
+            inputClass: 'square-input',
+            inputStyles: [{
+                fontSize: '15px'
+            }
+            ],
+            cardNumber: {
+                elementId: 'square-card-number',
+                placeholder: '•••• •••• •••• ••••'
+            },
+            expirationDate: {
+                elementId: 'square-expiration-date',
+                placeholder: 'MM/YY'
+            },
+            cvv: {
+                elementId: 'square-cvv',
+                placeholder: 'CVV'
+            },
+            postalCode: {
+                elementId: 'square-postal-code'
+            },
+            callbacks: {
+                cardNonceResponseReceived: function (errors, nonce, cardData) {
+                    if (errors) {
+                        errors.forEach(function (error) {
+                            var currentErrorvalue = $('#@Html.FieldIdFor(model => model.Errors)').val();
+                            $('#@Html.FieldIdFor(model => model.Errors)').val(currentErrorvalue + '|' + error.message);
+                        });
+                    }
+                    else {
+                        $('#@Html.FieldIdFor(model => model.CardNonce)').val(nonce);
+                    }
+                    paymentForm.destroy();
+                    paymentForm = null;
+
+                    submitForm = true;
+                    $('input.payment-info-next-step-button').click();
+                },
+
+                unsupportedBrowserDetected: function () {
+                    console.log('Browser is not supported');
+                },
+
+                paymentFormLoaded: function () {
+                    if (paymentForm) {
+                        paymentForm.setPostalCode('@Model.PostalCode');
+                    }
+                    $('.payment-info-next-step-button').prop('disabled', false);
+                    $('.payment-info-next-step-button').css("opacity", 1);
+                }
+            }
+        });
+        if (paymentForm) {
+            paymentForm.build();
+        }
+
+        $('input.payment-info-next-step-button').on('click', function (data) {
+            var selectedStoredCardId = $('#@Html.FieldIdFor(model => model.StoredCardId)').val()
+            if (!submitForm && (!selectedStoredCardId || selectedStoredCardId == '0')) {
+                if (paymentForm) {
+                    paymentForm.requestCardNonce();
+                }
+                return false;
+            }
+            else if (onePageCheckout) {
+                submitForm = false;
+                PaymentInfo.save();
+            }
+        });
+    });
+
+    function toggleStoredCard() {
+        var selectedStoredCardId = $('#@Html.FieldIdFor(model => model.StoredCardId)').val();
+        if (!selectedStoredCardId || selectedStoredCardId == '0') {
+            $('#square-card-details').show();
+        } else {
+            $('#square-card-details').hide();
+        }
+    }
+</script>
+
+@Html.HiddenFor(model => model.CardNonce)
+@Html.HiddenFor(model => model.Errors)
+
+@if (!Model.IsGuest && Model.StoredCards.Any())
+{
+    <table width="100%" cellspacing="2" cellpadding="1" border="0">
+        <tr>
+            <td>
+                @Html.LabelFor(model => model.StoredCardId, false):
+            </td>
+            <td>
+                @Html.DropDownListFor(model => model.StoredCardId, Model.StoredCards, new { @class = "square-input" })
+            </td>
+        </tr>
+    </table>
+}
+
+<table width="100%" cellspacing="2" cellpadding="1" border="0" id="square-card-details">
+    <tr>
+        <td>
+            <label>@T("Payment.CardNumber"):</label>
+        </td>
+        <td>
+            <div id="square-card-number" style="width:165px;"></div>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <label>@T("Payment.ExpirationDate"):</label>
+        </td>
+        <td>
+            <div id="square-expiration-date"></div>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <label>@T("Payment.CardCode"):</label>
+        </td>
+        <td>
+            <div id="square-cvv" style="width:60px;"></div>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            @Html.LabelFor(model => model.PostalCode, false):
+        </td>
+        <td>
+            <div id="square-postal-code"></div>
+        </td>
+    </tr>
+    @if (!Model.IsGuest)
+    {
+        <tr>
+            <td>
+                @Html.LabelFor(model => model.SaveCard, false):
+            </td>
+            <td>
+                @Html.CheckBoxFor(model => model.SaveCard)
+                @Html.ValidationMessageFor(model => model.SaveCard)
+            </td>
+        </tr>
+    }
+</table>
