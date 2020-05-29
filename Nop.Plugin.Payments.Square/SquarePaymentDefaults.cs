@@ -13,6 +13,46 @@ namespace Nop.Plugin.Payments.Square
         public const string VIEW_COMPONENT_NAME = "PaymentSquare";
 
         /// <summary>
+        /// Payment status "APPROVED"
+        /// </summary>
+        public const string PAYMENT_APPROVED_STATUS = "APPROVED";
+
+        /// <summary>
+        /// Payment status "COMPLETED"
+        /// </summary>
+        public const string PAYMENT_COMPLETED_STATUS = "COMPLETED";
+
+        /// <summary>
+        /// Payment status "FAILED"
+        /// </summary>
+        public const string PAYMENT_FAILED_STATUS = "FAILED";
+
+        /// <summary>
+        /// Payment status "CANCELED"
+        /// </summary>
+        public const string PAYMENT_CANCELED_STATUS = "CANCELED";
+
+        /// <summary>
+        /// Location status "ACTIVE"
+        /// </summary>
+        public const string LOCATION_STATUS_ACTIVE = "ACTIVE";
+
+        /// <summary>
+        /// Location capability "CREDIT_CARD_PROCESSING"
+        /// </summary>
+        public const string LOCATION_CAPABILITIES_PROCESSING = "CREDIT_CARD_PROCESSING";
+
+        /// <summary>
+        /// Refund status "PENDING"
+        /// </summary>
+        public const string REFUND_STATUS_PENDING = "PENDING";
+
+        /// <summary>
+        /// Refund status "COMPLETED"
+        /// </summary>
+        public const string REFUND_STATUS_COMPLETED = "COMPLETED";
+
+        /// <summary>
         /// Square payment method system name
         /// </summary>
         public static string SystemName => "Payments.Square";
@@ -36,6 +76,16 @@ namespace Nop.Plugin.Payments.Square
         /// Path to the Square payment form js script
         /// </summary>
         public static string PaymentFormScriptPath => "https://js.squareup.com/v2/paymentform";
+
+        /// <summary>
+        /// Path to the Square payment form js script
+        /// </summary>
+        public static string SandboxPaymentFormScriptPath => "https://js.squareupsandbox.com/v2/paymentform";
+
+        /// <summary>
+        /// Sandbox v2 BETA URL path
+        /// </summary>
+        public static string SandboxBaseUrl => "https://connect.squareupsandbox.com";
 
         /// <summary>
         /// Key of the attribute to store Square customer identifier
