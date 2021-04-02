@@ -57,7 +57,7 @@ namespace Nop.Plugin.Payments.Square.Services
         {
             try
             {
-                var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+                var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
                 //get response
                 var request = new ObtainAccessTokenRequest
@@ -94,7 +94,7 @@ namespace Nop.Plugin.Payments.Square.Services
         {
             try
             {
-                var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+                var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
                 //get response
                 var request = new ObtainAccessTokenRequest
@@ -131,7 +131,7 @@ namespace Nop.Plugin.Payments.Square.Services
         {
             try
             {
-                var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+                var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
                 //get response
                 var request = new RevokeAccessTokenRequest

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Nop.Core;
@@ -53,14 +54,14 @@ namespace Nop.Plugin.Payments.Square.Controllers
 
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
-        public IActionResult Configure()
+        public async Task<IActionResult> Configure()
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+            if (!(await _permissionService.AuthorizeAsync(StandardPermissionProvider.ManagePaymentMethods)))
                 return AccessDeniedView();
 
             //load settings for a chosen store scope
-            var storeId = _storeContext.ActiveStoreScopeConfiguration;
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var storeId = await _storeContext.GetActiveStoreScopeConfigurationAsync();
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             //prepare model
             var model = new ConfigurationModel
@@ -87,18 +88,18 @@ namespace Nop.Plugin.Payments.Square.Controllers
 
             if (storeId > 0)
             {
-                model.UseSandbox_OverrideForStore = _settingService.SettingExists(settings, x => x.UseSandbox, storeId);
-                model.Use3ds_OverrideForStore = _settingService.SettingExists(settings, x => x.Use3ds, storeId);
-                model.TransactionModeId_OverrideForStore = _settingService.SettingExists(settings, x => x.TransactionMode, storeId);
-                model.LocationId_OverrideForStore = _settingService.SettingExists(settings, x => x.LocationId, storeId);
-                model.AdditionalFee_OverrideForStore = _settingService.SettingExists(settings, x => x.AdditionalFee, storeId);
-                model.AdditionalFeePercentage_OverrideForStore = _settingService.SettingExists(settings, x => x.AdditionalFeePercentage, storeId);
+                model.UseSandbox_OverrideForStore = await _settingService.SettingExistsAsync(settings, x => x.UseSandbox, storeId);
+                model.Use3ds_OverrideForStore = await _settingService.SettingExistsAsync(settings, x => x.Use3ds, storeId);
+                model.TransactionModeId_OverrideForStore = await _settingService.SettingExistsAsync(settings, x => x.TransactionMode, storeId);
+                model.LocationId_OverrideForStore = await _settingService.SettingExistsAsync(settings, x => x.LocationId, storeId);
+                model.AdditionalFee_OverrideForStore = await _settingService.SettingExistsAsync(settings, x => x.AdditionalFee, storeId);
+                model.AdditionalFeePercentage_OverrideForStore = await _settingService.SettingExistsAsync(settings, x => x.AdditionalFeePercentage, storeId);
             }
 
             //prepare business locations, every payment a merchant processes is associated with one of these locations
             if (!string.IsNullOrEmpty(settings.AccessToken))
             {
-                model.Locations = _squarePaymentManager.GetActiveLocations(storeId).Select(location =>
+                model.Locations = (await _squarePaymentManager.GetActiveLocations(storeId)).Select(location =>
                 {
                     var name = location.BusinessName;
                     if (!location.Name.Equals(location.BusinessName))
@@ -107,7 +108,7 @@ namespace Nop.Plugin.Payments.Square.Controllers
                 }).ToList();
                 if (model.Locations.Any())
                 {
-                    var selectLocationText = _localizationService.GetResource("Plugins.Payments.Square.Fields.Location.Select");
+                    var selectLocationText = await _localizationService.GetResourceAsync("Plugins.Payments.Square.Fields.Location.Select");
                     model.Locations.Insert(0, new SelectListItem { Text = selectLocationText, Value = "0" });
                 }
             }
@@ -115,13 +116,13 @@ namespace Nop.Plugin.Payments.Square.Controllers
             //add the special item for 'there are no location' with value 0
             if (!model.Locations.Any())
             {
-                var noLocationText = _localizationService.GetResource("Plugins.Payments.Square.Fields.Location.NotExist");
+                var noLocationText = await _localizationService.GetResourceAsync("Plugins.Payments.Square.Fields.Location.NotExist");
                 model.Locations.Add(new SelectListItem { Text = noLocationText, Value = "0" });
             }
 
             //warn admin that the location is a required parameter
             if (string.IsNullOrEmpty(settings.LocationId) || settings.LocationId.Equals("0"))
-                _notificationService.WarningNotification(_localizationService.GetResource("Plugins.Payments.Square.Fields.Location.Hint"));
+                _notificationService.WarningNotification(await _localizationService.GetResourceAsync("Plugins.Payments.Square.Fields.Location.Hint"));
 
             //migrate to using refresh tokens
             if (!settings.UseSandbox && settings.RefreshToken == Guid.Empty.ToString())
@@ -139,17 +140,17 @@ namespace Nop.Plugin.Payments.Square.Controllers
         [FormValueRequired("save")]
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
-        public IActionResult Configure(ConfigurationModel model)
+        public async Task<IActionResult> Configure(ConfigurationModel model)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+            if (! await _permissionService.AuthorizeAsync(StandardPermissionProvider.ManagePaymentMethods))
                 return AccessDeniedView();
 
             if (!ModelState.IsValid)
-                return Configure();
+                return await Configure();
 
             //load settings for a chosen store scope
-            var storeId = _storeContext.ActiveStoreScopeConfiguration;
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var storeId = await _storeContext.GetActiveStoreScopeConfigurationAsync();
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             //save settings
             if (model.UseSandbox)
@@ -172,51 +173,51 @@ namespace Nop.Plugin.Payments.Square.Controllers
             settings.AdditionalFee = model.AdditionalFee;
             settings.AdditionalFeePercentage = model.AdditionalFeePercentage;
 
-            _settingService.SaveSetting(settings, x => x.ApplicationId, storeId, false);
-            _settingService.SaveSetting(settings, x => x.ApplicationSecret, storeId, false);
-            _settingService.SaveSetting(settings, x => x.AccessToken, storeId, false);
-            _settingService.SaveSettingOverridablePerStore(settings, x => x.UseSandbox, model.UseSandbox_OverrideForStore, storeId, false);
-            _settingService.SaveSettingOverridablePerStore(settings, x => x.Use3ds, model.Use3ds_OverrideForStore, storeId, false);
-            _settingService.SaveSettingOverridablePerStore(settings, x => x.TransactionMode, model.TransactionModeId_OverrideForStore, storeId, false);
-            _settingService.SaveSettingOverridablePerStore(settings, x => x.LocationId, model.LocationId_OverrideForStore, storeId, false);
-            _settingService.SaveSettingOverridablePerStore(settings, x => x.AdditionalFee, model.AdditionalFee_OverrideForStore, storeId, false);
-            _settingService.SaveSettingOverridablePerStore(settings, x => x.AdditionalFeePercentage, model.AdditionalFeePercentage_OverrideForStore, storeId, false);
+            await _settingService.SaveSettingAsync(settings, x => x.ApplicationId, storeId, false);
+            await _settingService.SaveSettingAsync(settings, x => x.ApplicationSecret, storeId, false);
+            await _settingService.SaveSettingAsync(settings, x => x.AccessToken, storeId, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(settings, x => x.UseSandbox, model.UseSandbox_OverrideForStore, storeId, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(settings, x => x.Use3ds, model.Use3ds_OverrideForStore, storeId, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(settings, x => x.TransactionMode, model.TransactionModeId_OverrideForStore, storeId, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(settings, x => x.LocationId, model.LocationId_OverrideForStore, storeId, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(settings, x => x.AdditionalFee, model.AdditionalFee_OverrideForStore, storeId, false);
+            await _settingService.SaveSettingOverridablePerStoreAsync(settings, x => x.AdditionalFeePercentage, model.AdditionalFeePercentage_OverrideForStore, storeId, false);
 
-            _settingService.ClearCache();
+            await _settingService.ClearCacheAsync();
 
-            _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Plugins.Saved"));
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Plugins.Saved"));
 
-            return Configure();
+            return await Configure();
         }
 
         [HttpPost, ActionName("Configure")]
         [FormValueRequired("obtainAccessToken")]
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
-        public IActionResult ObtainAccessToken(ConfigurationModel model)
+        public async Task<IActionResult> ObtainAccessToken(ConfigurationModel model)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+            if (! (await _permissionService.AuthorizeAsync(StandardPermissionProvider.ManagePaymentMethods)))
                 return AccessDeniedView();
 
             //load settings for a chosen store scope
-            var storeId = _storeContext.ActiveStoreScopeConfiguration;
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var storeId = await _storeContext.GetActiveStoreScopeConfigurationAsync();
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             //create new verification string
             settings.AccessTokenVerificationString = Guid.NewGuid().ToString();
-            _settingService.SaveSetting(settings, x => settings.AccessTokenVerificationString, storeId);
+            await _settingService.SaveSettingAsync(settings, x => settings.AccessTokenVerificationString, storeId);
 
             //get the URL to directs a Square merchant's web browser
-            var redirectUrl = _squarePaymentManager.GenerateAuthorizeUrl(storeId);
+            var redirectUrl = await _squarePaymentManager.GenerateAuthorizeUrl(storeId);
 
             return Redirect(redirectUrl);
         }
 
-        public IActionResult AccessTokenCallback()
+        public async Task<IActionResult> AccessTokenCallback()
         {
             //load settings for a current store
-            var storeId = _storeContext.ActiveStoreScopeConfiguration;
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var storeId = await _storeContext.GetActiveStoreScopeConfigurationAsync();
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             //handle access token callback
             try
@@ -245,17 +246,17 @@ namespace Nop.Plugin.Payments.Square.Controllers
                 settings.AccessToken = accessToken;
                 settings.RefreshToken = refreshToken;
 
-                _settingService.SaveSetting(settings, x => x.AccessToken, storeId, false);
-                _settingService.SaveSetting(settings, x => x.RefreshToken, storeId, false);
+                await _settingService.SaveSettingAsync(settings, x => x.AccessToken, storeId, false);
+                await _settingService.SaveSettingAsync(settings, x => x.RefreshToken, storeId, false);
 
-                _settingService.ClearCache();
+                await _settingService.ClearCacheAsync();
 
-                _notificationService.SuccessNotification(_localizationService.GetResource("Plugins.Payments.Square.ObtainAccessToken.Success"));
+                _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Plugins.Payments.Square.ObtainAccessToken.Success"));
             }
             catch (Exception exception)
             {
                 //display errors
-                _notificationService.ErrorNotification(_localizationService.GetResource("Plugins.Payments.Square.ObtainAccessToken.Error"));
+                _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Plugins.Payments.Square.ObtainAccessToken.Error"));
                 if (!string.IsNullOrEmpty(exception.Message))
                     _notificationService.ErrorNotification(exception.Message);
             }
@@ -267,14 +268,14 @@ namespace Nop.Plugin.Payments.Square.Controllers
         [FormValueRequired("revokeAccessTokens")]
         [AuthorizeAdmin]
         [Area(AreaNames.Admin)]
-        public IActionResult RevokeAccessTokens(ConfigurationModel model)
+        public async Task<IActionResult> RevokeAccessTokens(ConfigurationModel model)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
+            if (!(await _permissionService.AuthorizeAsync(StandardPermissionProvider.ManagePaymentMethods)))
                 return AccessDeniedView();
 
             //load settings for a chosen store scope
-            var storeId = _storeContext.ActiveStoreScopeConfiguration;
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var storeId = await _storeContext.GetActiveStoreScopeConfigurationAsync();
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             try
             {
@@ -285,19 +286,19 @@ namespace Nop.Plugin.Payments.Square.Controllers
 
                 //if access token successfully revoked, delete it from the settings
                 settings.AccessToken = string.Empty;
-                _settingService.SaveSetting(settings, x => x.AccessToken, storeId);
+                await _settingService.SaveSettingAsync(settings, x => x.AccessToken, storeId);
 
-                _notificationService.SuccessNotification(_localizationService.GetResource("Plugins.Payments.Square.RevokeAccessTokens.Success"));
+                _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Plugins.Payments.Square.RevokeAccessTokens.Success"));
             }
             catch (Exception exception)
             {
-                var error = _localizationService.GetResource("Plugins.Payments.Square.RevokeAccessTokens.Error");
+                var error = await _localizationService.GetResourceAsync("Plugins.Payments.Square.RevokeAccessTokens.Error");
                 if (!string.IsNullOrEmpty(exception.Message))
                     error = $"{error} - {exception.Message}";
                 _notificationService.ErrorNotification(exception.Message);
             }
 
-            return Configure();
+            return await Configure();
         }
 
         #endregion

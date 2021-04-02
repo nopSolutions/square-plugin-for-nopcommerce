@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Nop.Core;
@@ -80,26 +81,27 @@ namespace Nop.Plugin.Payments.Square.Components
         /// <param name="widgetZone">Widget zone name</param>
         /// <param name="additionalData">Additional data</param>
         /// <returns>View component result</returns>
-        public IViewComponentResult Invoke(string widgetZone, object additionalData)
+        public async Task<IViewComponentResult> InvokeAsync(string widgetZone, object additionalData)
         {
+            var currentCustomer = await _workContext.GetCurrentCustomerAsync();
             var model = new PaymentInfoModel
             {
                 //whether current customer is guest
-                IsGuest = _customerService.IsGuest(_workContext.CurrentCustomer),
+                IsGuest = await _customerService.IsGuestAsync(currentCustomer),
 
                 //get postal code from the billing address or from the shipping one
-                PostalCode = _customerService.GetCustomerBillingAddress(_workContext.CurrentCustomer)?.ZipPostalCode
-                    ?? _customerService.GetCustomerShippingAddress(_workContext.CurrentCustomer)?.ZipPostalCode
+                PostalCode = (await _customerService.GetCustomerBillingAddressAsync(currentCustomer))?.ZipPostalCode
+                    ?? (await _customerService.GetCustomerShippingAddressAsync(currentCustomer))?.ZipPostalCode
             };
 
             //whether customer already has stored cards in current store
-            var storeId = _storeContext.CurrentStore.Id;
-            var customerId = _genericAttributeService
-                .GetAttribute<string>(_workContext.CurrentCustomer, SquarePaymentDefaults.CustomerIdAttribute) ?? string.Empty;
-            var customer = _squarePaymentManager.GetCustomer(customerId, storeId);
+            var storeId = (await _storeContext.GetCurrentStoreAsync()).Id;
+            var customerId = await _genericAttributeService
+                .GetAttributeAsync<string>(currentCustomer, SquarePaymentDefaults.CustomerIdAttribute) ?? string.Empty;
+            var customer = await _squarePaymentManager.GetCustomer(customerId, storeId);
             if (customer?.Cards != null)
             {
-                var cardNumberMask = _localizationService.GetResource("Plugins.Payments.Square.Fields.StoredCard.Mask");
+                var cardNumberMask = await _localizationService.GetResourceAsync("Plugins.Payments.Square.Fields.StoredCard.Mask");
                 model.StoredCards = customer.Cards
                     .Select(card => new SelectListItem { Text = string.Format(cardNumberMask, card.Last4), Value = card.Id })
                     .ToList();
@@ -108,23 +110,23 @@ namespace Nop.Plugin.Payments.Square.Components
             //add the special item for 'select card' with empty GUID value
             if (model.StoredCards.Any())
             {
-                var selectCardText = _localizationService.GetResource("Plugins.Payments.Square.Fields.StoredCard.SelectCard");
+                var selectCardText = await _localizationService.GetResourceAsync("Plugins.Payments.Square.Fields.StoredCard.SelectCard");
                 model.StoredCards.Insert(0, new SelectListItem { Text = selectCardText, Value = Guid.Empty.ToString() });
             }
 
             //set verfication details
             if (_squarePaymentSettings.Use3ds)
             {
-                var cart = _shoppingCartService.GetShoppingCart(_workContext.CurrentCustomer,
-                    ShoppingCartType.ShoppingCart, _storeContext.CurrentStore.Id);
-                model.OrderTotal = _orderTotalCalculationService.GetShoppingCartTotal(cart, false, false) ?? decimal.Zero;
+                var cart = await _shoppingCartService.GetShoppingCartAsync(currentCustomer,
+                    ShoppingCartType.ShoppingCart, storeId);
+                model.OrderTotal = (await _orderTotalCalculationService.GetShoppingCartTotalAsync(cart, false, false)).shoppingCartTotal ?? decimal.Zero;
 
-                var currency = _currencyService.GetCurrencyById(_currencySettings.PrimaryStoreCurrencyId);
+                var currency = await _currencyService.GetCurrencyByIdAsync(_currencySettings.PrimaryStoreCurrencyId);
                 model.Currency = currency?.CurrencyCode;
 
-                var billingAddress = _customerService.GetCustomerBillingAddress(_workContext.CurrentCustomer);
-                var country = _countryService.GetCountryByAddress(billingAddress);
-                var stateProvince = _stateProvinceService.GetStateProvinceByAddress(billingAddress);
+                var billingAddress = await _customerService.GetCustomerBillingAddressAsync(currentCustomer);
+                var country = await _countryService.GetCountryByAddressAsync(billingAddress);
+                var stateProvince = await _stateProvinceService.GetStateProvinceByAddressAsync(billingAddress);
 
                 model.BillingFirstName = billingAddress?.FirstName;
                 model.BillingLastName = billingAddress?.LastName;

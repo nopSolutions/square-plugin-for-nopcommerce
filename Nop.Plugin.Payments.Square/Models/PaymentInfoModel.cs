@@ -8,7 +8,7 @@ namespace Nop.Plugin.Payments.Square.Models
     /// <summary>
     /// Represents payment model
     /// </summary>
-    public class PaymentInfoModel : BaseNopModel
+    public record PaymentInfoModel : BaseNopModel
     {
         #region Ctor
 

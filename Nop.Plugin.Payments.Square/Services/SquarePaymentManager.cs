@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.WebUtilities;
 using Nop.Core;
 using Nop.Services.Configuration;
@@ -48,9 +49,9 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="storeId">Store identifier for which configuration should be loaded</param>
         /// <returns>The Square Client</returns>
-        private ISquareClient CreateSquareClient(int storeId)
+        private async Task<ISquareClient> CreateSquareClient(int storeId)
         {
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             //validate access token
             if (settings.UseSandbox && string.IsNullOrEmpty(settings.AccessToken))
@@ -78,11 +79,11 @@ namespace Nop.Plugin.Payments.Square.Services
             }
         }
 
-        private string CatchException(Exception exception)
+        private async Task<string> CatchException(Exception exception)
         {
             //log full error
             var errorMessage = exception.Message;
-            _logger.Error($"Square payment error: {errorMessage}.", exception, _workContext.CurrentCustomer);
+            _ = _logger.ErrorAsync($"Square payment error: {errorMessage}.", exception, await _workContext.GetCurrentCustomerAsync());
 
             // check Square exception
             if (exception is ApiException apiException)
@@ -106,10 +107,10 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="storeId">Store identifier for which locations should be loaded</param>
         /// <returns>Location</returns>
-        public Location GetSelectedActiveLocation(int storeId)
+        public async Task<Location> GetSelectedActiveLocation(int storeId)
         {
-            var client = CreateSquareClient(storeId);
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var client = await CreateSquareClient(storeId);
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             if (string.IsNullOrEmpty(settings.LocationId))
                 return null;
@@ -145,9 +146,9 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="storeId">Store identifier for which locations should be loaded</param>
         /// <returns>List of location</returns>
-        public IList<Location> GetActiveLocations(int storeId)
+        public async Task<IList<Location>> GetActiveLocations(int storeId)
         {
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient(storeId);
 
             try
             {
@@ -179,13 +180,13 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="customerId">Customer ID</param>
         /// <param name="storeId">Store identifier for which customer should be loaded</param>
         /// <returns>Customer</returns>
-        public Customer GetCustomer(string customerId, int storeId)
+        public async Task<Customer> GetCustomer(string customerId, int storeId)
         {
             //whether passed customer identifier exists
             if (string.IsNullOrEmpty(customerId))
                 return null;
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient(storeId);
 
             try
             {
@@ -212,12 +213,12 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="customerRequest">Request parameters to create customer</param>
         /// <param name="storeId">Store identifier for which customer should be created</param>
         /// <returns>Customer</returns>
-        public Customer CreateCustomer(CreateCustomerRequest customerRequest, int storeId)
+        public async Task<Customer> CreateCustomer(CreateCustomerRequest customerRequest, int storeId)
         {
             if (customerRequest == null)
                 throw new ArgumentNullException(nameof(customerRequest));
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient(storeId);
 
             try
             {
@@ -245,7 +246,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="cardRequest">Request parameters to create card of the customer</param>
         /// <param name="storeId">Store identifier for which customer card should be created</param>
         /// <returns>Card</returns>
-        public Card CreateCustomerCard(string customerId, CreateCustomerCardRequest cardRequest, int storeId)
+        public async Task<Card> CreateCustomerCard(string customerId, CreateCustomerCardRequest cardRequest, int storeId)
         {
             if (cardRequest == null)
                 throw new ArgumentNullException(nameof(cardRequest));
@@ -254,7 +255,7 @@ namespace Nop.Plugin.Payments.Square.Services
             if (string.IsNullOrEmpty(customerId))
                 return null;
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient (storeId);
 
             try
             {
@@ -285,12 +286,12 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="paymentRequest">Request parameters to create payment</param>
         /// <param name="storeId">Store identifier for which payment should be created</param>
         /// <returns>Payment and/or errors if exist</returns>
-        public (Payment, string) CreatePayment(CreatePaymentRequest paymentRequest, int storeId)
+        public async Task<(Payment, string)> CreatePayment(CreatePaymentRequest paymentRequest, int storeId)
         {
             if (paymentRequest == null)
                 throw new ArgumentNullException(nameof(paymentRequest));
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient (storeId);
 
             try
             {
@@ -304,7 +305,7 @@ namespace Nop.Plugin.Payments.Square.Services
             }
             catch (Exception exception)
             {
-                return (null, CatchException(exception));
+                return (null, await CatchException(exception));
             }
         }
 
@@ -314,16 +315,17 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="paymentId">Payment ID</param>
         /// <param name="storeId">Store identifier for which payment should be completed</param>
         /// <returns>True if the payment successfully completed; otherwise false. And/or errors if exist</returns>
-        public (bool, string) CompletePayment(string paymentId, int storeId)
+        public async Task<(bool, string)> CompletePayment(string paymentId, int storeId)
         {
             if (string.IsNullOrEmpty(paymentId))
                 return (false, null);
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient(storeId);
 
             try
             {
-                var paymentResponse = client.PaymentsApi.CompletePayment(paymentId, null);
+                var cancelToken = new System.Threading.CancellationToken();
+                var paymentResponse = await client.PaymentsApi.CompletePaymentAsync(paymentId, cancelToken);
                 if (paymentResponse == null)
                     throw new NopException("No service response");
 
@@ -334,7 +336,7 @@ namespace Nop.Plugin.Payments.Square.Services
             }
             catch (Exception exception)
             {
-                return (false, CatchException(exception));
+                return (false, await CatchException (exception));
             }
         }
 
@@ -344,12 +346,12 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="paymentId">Payment ID</param>
         /// <param name="storeId">Store identifier for which payment should be canceled</param>
         /// <returns>True if the payment successfully canceled; otherwise false. And/or errors if exist</returns>
-        public (bool, string) CancelPayment(string paymentId, int storeId)
+        public async Task<(bool, string)> CancelPayment(string paymentId, int storeId)
         {
             if (string.IsNullOrEmpty(paymentId))
                 return (false, null);
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient(storeId);
 
             try
             {
@@ -364,7 +366,7 @@ namespace Nop.Plugin.Payments.Square.Services
             }
             catch (Exception exception)
             {
-                return (false, CatchException(exception));
+                return (false, await CatchException (exception));
             }
         }
 
@@ -374,12 +376,12 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <param name="refundPaymentRequest">Request parameters to create refund</param>
         /// <param name="storeId">Store identifier for which payment should be refunded</param>
         /// <returns>Payment refund and/or errors if exist</returns>
-        public (PaymentRefund, string) RefundPayment(RefundPaymentRequest refundPaymentRequest, int storeId)
+        public async Task< (PaymentRefund, string)> RefundPayment(RefundPaymentRequest refundPaymentRequest, int storeId)
         {
             if (refundPaymentRequest == null)
                 throw new ArgumentNullException(nameof(refundPaymentRequest));
 
-            var client = CreateSquareClient(storeId);
+            var client = await CreateSquareClient(storeId);
 
             try
             {
@@ -393,7 +395,7 @@ namespace Nop.Plugin.Payments.Square.Services
             }
             catch (Exception exception)
             {
-                return (null, CatchException(exception));
+                return (null, await CatchException(exception));
             }
         }
         #endregion
@@ -405,7 +407,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// </summary>
         /// <param name="storeId">Store identifier for which authorization url should be created</param>
         /// <returns>URL</returns>
-        public string GenerateAuthorizeUrl(int storeId)
+        public async Task<string> GenerateAuthorizeUrl(int storeId)
         {
             var serviceUrl = $"{_squareAuthorizationHttpClient.BaseAddress}authorize";
 
@@ -461,7 +463,7 @@ namespace Nop.Plugin.Payments.Square.Services
             //request all of the permissions
             var requestingPermissions = string.Join(" ", permissionScopes);
 
-            var settings = _settingService.LoadSetting<SquarePaymentSettings>(storeId);
+            var settings = await _settingService.LoadSettingAsync<SquarePaymentSettings>(storeId);
 
             //create query parameters for the request
             var queryParameters = new Dictionary<string, string>

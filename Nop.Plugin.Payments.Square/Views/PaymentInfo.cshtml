@@ -79,7 +79,7 @@
                         paymentForm.destroy();
                         paymentForm = null;
                         submitForm = true;
-                        $('input.payment-info-next-step-button').trigger("click");
+                        $('button.payment-info-next-step-button').trigger("click");
                     }
                     else if (use3ds) {
                         verifyBuyer(nonce);
@@ -87,7 +87,7 @@
                     else {
                         $('#@Html.IdFor(model => model.CardNonce)').val(nonce);
                         submitForm = true;
-                        $('input.payment-info-next-step-button').trigger("click");
+                        $('button.payment-info-next-step-button').trigger("click");
                     }
                 },
 
@@ -108,7 +108,7 @@
             paymentForm.build();
         }
 
-        $('input.payment-info-next-step-button').on('click', function (data) {
+        $('button.payment-info-next-step-button').on('click', function (data) {
             if (!submitForm) {
                 if (paymentForm) {
                     var selectedStoredCardId = $('#@Html.IdFor(model => model.StoredCardId)').val();
@@ -173,7 +173,7 @@
                         $('#@Html.IdFor(model => model.Token)').val(verificationResult.token);
                     }
                     submitForm = true;
-                    $('input.payment-info-next-step-button').trigger("click");
+                    $('button.payment-info-next-step-button').trigger("click");
                 }
             );
         }
