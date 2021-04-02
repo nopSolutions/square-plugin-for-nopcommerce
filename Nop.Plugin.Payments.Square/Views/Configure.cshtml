@@ -39,7 +39,7 @@
     <div class="panel-group">
         <div class="panel panel-default">
             <div class="panel-body">
-                @Html.Raw(string.Format(T("Plugins.Payments.Square.Instructions").Text, Url.RouteUrl(SquarePaymentDefaults.AccessTokenRoute, null, webHelper.CurrentRequestProtocol)))
+                @Html.Raw(string.Format(T("Plugins.Payments.Square.Instructions").Text, Url.RouteUrl(SquarePaymentDefaults.AccessTokenRoute, null, webHelper.GetCurrentRequestProtocol())))
                 <div class="form-group">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="UseSandbox_OverrideForStore" asp-input="UseSandbox" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
@@ -130,7 +130,7 @@
                         <nop-label asp-for="TransactionModeId" />
                     </div>
                     <div class="col-md-9">
-                        <nop-select asp-for="TransactionModeId" asp-items="@(TransactionMode.Authorize.ToSelectList(false))" />
+                        <nop-select asp-for="TransactionModeId" asp-items="@(await TransactionMode.Authorize.ToSelectListAsync(false))" />
                         <span asp-validation-for="TransactionModeId"></span>
                     </div>
                 </div>

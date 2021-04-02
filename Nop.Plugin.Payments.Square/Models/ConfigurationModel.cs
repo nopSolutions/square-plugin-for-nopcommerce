@@ -9,7 +9,7 @@ namespace Nop.Plugin.Payments.Square.Models
     /// <summary>
     /// Represents configuration model
     /// </summary>
-    public class ConfigurationModel : BaseNopModel
+    public record ConfigurationModel : BaseNopModel
     {
         #region Ctor
 
@@ -32,17 +32,14 @@ namespace Nop.Plugin.Payments.Square.Models
 
         [NopResourceDisplayName("Plugins.Payments.Square.Fields.ApplicationSecret")]
         [DataType(DataType.Password)]
-        [NoTrim]
         public string ApplicationSecret { get; set; }
 
         [NopResourceDisplayName("Plugins.Payments.Square.Fields.AccessToken")]
         [DataType(DataType.Password)]
-        [NoTrim]
         public string AccessToken { get; set; }
 
         [NopResourceDisplayName("Plugins.Payments.Square.Fields.SandboxAccessToken")]
         [DataType(DataType.Password)]
-        [NoTrim]
         public string SandboxAccessToken { get; set; }
 
         [NopResourceDisplayName("Plugins.Payments.Square.Fields.UseSandbox")]
