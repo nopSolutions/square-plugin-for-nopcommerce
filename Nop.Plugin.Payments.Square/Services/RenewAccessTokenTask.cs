@@ -51,10 +51,10 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <summary>
         /// Executes a task
         /// </summary>
-        public void Execute()
+        public async System.Threading.Tasks.Task ExecuteAsync()
         {
             //whether plugin is active
-            if (!_paymentPluginManager.IsPluginActive(SquarePaymentDefaults.SystemName))
+            if (!await _paymentPluginManager.IsPluginActiveAsync(SquarePaymentDefaults.SystemName))
                 return;
 
             //do not execute for sandbox environment
@@ -63,10 +63,10 @@ namespace Nop.Plugin.Payments.Square.Services
 
             try
             {
-                var storeId = _storeContext.CurrentStore.Id;
+                var storeId = (await _storeContext.GetCurrentStoreAsync()).Id;
 
                 //get the new access token
-                var (newAccessToken, refreshToken) = _squarePaymentManager.RenewAccessToken(storeId);
+                var (newAccessToken, refreshToken) = await _squarePaymentManager.RenewAccessTokenAsync(storeId);
                 if (string.IsNullOrEmpty(newAccessToken) || string.IsNullOrEmpty(refreshToken))
                     throw new NopException("No service response");
 
@@ -74,18 +74,18 @@ namespace Nop.Plugin.Payments.Square.Services
                 _squarePaymentSettings.AccessToken = newAccessToken;
                 _squarePaymentSettings.RefreshToken = refreshToken;
 
-                _settingService.SaveSetting(_squarePaymentSettings, x => x.AccessToken, storeId, false);
-                _settingService.SaveSetting(_squarePaymentSettings, x => x.RefreshToken, storeId, false);
+                await _settingService.SaveSettingAsync(_squarePaymentSettings, x => x.AccessToken, storeId, false);
+                await _settingService.SaveSettingAsync(_squarePaymentSettings, x => x.RefreshToken, storeId, false);
 
-                _settingService.ClearCache();
+                await _settingService.ClearCacheAsync();
 
                 //log information about the successful renew of the access token
-                _logger.Information(_localizationService.GetResource("Plugins.Payments.Square.RenewAccessToken.Success"));
+                await _logger.InformationAsync(await _localizationService.GetResourceAsync("Plugins.Payments.Square.RenewAccessToken.Success"));
             }
             catch (Exception exception)
             {
                 //log error on renewing of the access token
-                _logger.Error(_localizationService.GetResource("Plugins.Payments.Square.RenewAccessToken.Error"), exception);
+                await _logger.ErrorAsync(await _localizationService.GetResourceAsync("Plugins.Payments.Square.RenewAccessToken.Error"), exception);
             }
         }
 

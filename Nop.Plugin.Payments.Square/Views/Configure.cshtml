@@ -36,11 +36,11 @@
 @await Component.InvokeAsync("StoreScopeConfiguration")
 
 <form asp-controller="PaymentSquare" asp-action="Configure" method="post">
-    <div class="panel-group">
-        <div class="panel panel-default">
-            <div class="panel-body">
-                @Html.Raw(string.Format(T("Plugins.Payments.Square.Instructions").Text, Url.RouteUrl(SquarePaymentDefaults.AccessTokenRoute, null, webHelper.CurrentRequestProtocol)))
-                <div class="form-group">
+    <div class="cards-group">
+        <div class="card card-default">
+            <div class="card-body">
+                @Html.Raw(string.Format(T("Plugins.Payments.Square.Instructions").Text, Url.RouteUrl(SquarePaymentDefaults.AccessTokenRoute, null, webHelper.GetCurrentRequestProtocol())))
+                <div class="form-group row">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="UseSandbox_OverrideForStore" asp-input="UseSandbox" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
                         <nop-label asp-for="UseSandbox" />
@@ -51,7 +51,7 @@
                     </div>
                 </div>
                 <nop-nested-setting asp-for="UseSandbox">
-                    <div class="form-group" id="sandboxApplicationId">
+                    <div class="form-group row" id="sandboxApplicationId">
                         <div class="col-md-3">
                             <nop-label asp-for="SandboxApplicationId" />
                         </div>
@@ -60,7 +60,7 @@
                             <span asp-validation-for="SandboxApplicationId"></span>
                         </div>
                     </div>
-                    <div class="form-group" id="sandboxAccessToken">
+                    <div class="form-group row" id="sandboxAccessToken">
                         <div class="col-md-3">
                             <nop-label asp-for="SandboxAccessToken" />
                         </div>
@@ -70,7 +70,7 @@
                         </div>
                     </div>
                 </nop-nested-setting>
-                <div class="form-group" id="liveApplicationId">
+                <div class="form-group row" id="liveApplicationId">
                     <div class="col-md-3">
                         <nop-label asp-for="ApplicationId" />
                     </div>
@@ -79,7 +79,7 @@
                         <span asp-validation-for="ApplicationId"></span>
                     </div>
                 </div>
-                <div class="form-group" id="groupApplicationSecret">
+                <div class="form-group row" id="groupApplicationSecret">
                     <div class="col-md-3">
                         <nop-label asp-for="ApplicationSecret" />
                     </div>
@@ -88,7 +88,7 @@
                         <span asp-validation-for="ApplicationSecret"></span>
                     </div>
                 </div>
-                <div class="form-group" id="liveAccessToken">
+                <div class="form-group row" id="liveAccessToken">
                     <div class="col-md-3">
                         <nop-label asp-for="AccessToken" />
                     </div>
@@ -104,7 +104,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group row">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="LocationId_OverrideForStore" asp-input="LocationId" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
                         <nop-label asp-for="LocationId" />
@@ -114,7 +114,7 @@
                         <span asp-validation-for="LocationId"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group row">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="Use3ds_OverrideForStore" asp-input="Use3ds" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
                         <nop-label asp-for="Use3ds" />
@@ -124,17 +124,17 @@
                         <span asp-validation-for="Use3ds"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group row">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="TransactionModeId_OverrideForStore" asp-input="TransactionModeId" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
                         <nop-label asp-for="TransactionModeId" />
                     </div>
                     <div class="col-md-9">
-                        <nop-select asp-for="TransactionModeId" asp-items="@(TransactionMode.Authorize.ToSelectList(false))" />
+                        <nop-select asp-for="TransactionModeId" asp-items="@(await TransactionMode.Authorize.ToSelectListAsync(false))" />
                         <span asp-validation-for="TransactionModeId"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group row">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="AdditionalFee_OverrideForStore" asp-input="AdditionalFee" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
                         <nop-label asp-for="AdditionalFee" />
@@ -144,7 +144,7 @@
                         <span asp-validation-for="AdditionalFee"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group row">
                     <div class="col-md-3">
                         <nop-override-store-checkbox asp-for="AdditionalFeePercentage_OverrideForStore" asp-input="AdditionalFeePercentage" asp-store-scope="@Model.ActiveStoreScopeConfiguration" />
                         <nop-label asp-for="AdditionalFeePercentage" />
@@ -154,7 +154,7 @@
                         <span asp-validation-for="AdditionalFeePercentage"></span>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group row">
                     <div class="col-md-9 col-md-offset-3">
                         <div class="input-group input-group-short">
                             <div class="input-group-text">
