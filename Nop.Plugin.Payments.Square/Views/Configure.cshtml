@@ -95,7 +95,7 @@
                     <div class="col-md-9">
                         <div class="input-group input-group-required">
                             <nop-editor asp-for="AccessToken" asp-value="@Model.AccessToken" asp-disabled="true" />
-                            <div class="input-group-btn">
+                            <div class="input-group-append">
                                 <button type="submit" name="obtainAccessToken" class="btn btn-info">
                                     @T("Plugins.Payments.Square.ObtainAccessToken")
                                 </button>
@@ -155,7 +155,7 @@
                     </div>
                 </div>
                 <div class="form-group row">
-                    <div class="col-md-9 col-md-offset-3">
+                    <div class="col-md-9 offset-md-3">
                         <div class="input-group input-group-short">
                             <div class="input-group-text">
                                 <input type="submit" name="save" class="btn btn-primary" value="@T("Admin.Common.Save")" />
