@@ -7,7 +7,7 @@
 
 @{
     Layout = "";
-    Html.AddScriptParts(ResourceLocation.Footer,
+    NopHtml.AddScriptParts(ResourceLocation.Footer,
         squarePaymentSettings.UseSandbox ? SquarePaymentDefaults.SandboxPaymentFormScriptPath : SquarePaymentDefaults.PaymentFormScriptPath,
         excludeFromBundle: true);
 }
@@ -256,5 +256,5 @@
 
 @if (orderSettings.OnePageCheckoutEnabled)
 {
-    @Html.NopInlineScripts(ResourceLocation.Footer)
+    @NopHtml.GenerateInlineScripts(ResourceLocation.Footer);
 }

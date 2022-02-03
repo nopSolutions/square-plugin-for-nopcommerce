@@ -11,7 +11,7 @@ using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Payments;
-using Nop.Core.Domain.Tasks;
+using Nop.Core.Domain.ScheduleTasks;
 using Nop.Plugin.Payments.Square.Domain;
 using Nop.Plugin.Payments.Square.Extensions;
 using Nop.Plugin.Payments.Square.Models;
@@ -22,9 +22,10 @@ using Nop.Services.Customers;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
+using Nop.Services.Orders;
 using Nop.Services.Payments;
 using Nop.Services.Plugins;
-using Nop.Services.Tasks;
+using Nop.Services.ScheduleTasks;
 using Nop.Web.Framework.UI;
 using SquareModel = Square.Models;
 
@@ -44,8 +45,8 @@ namespace Nop.Plugin.Payments.Square
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly ILocalizationService _localizationService;
         private readonly ILogger _logger;
-        private readonly IPaymentService _paymentService;
-        private readonly IPageHeadBuilder _pageHeadBuilder;
+        private readonly IOrderTotalCalculationService _orderTotalCalculationService;
+        private readonly INopHtmlHelper _nopHtmlHelper;
         private readonly ISettingService _settingService;
         private readonly IScheduleTaskService _scheduleTaskService;
         private readonly IStateProvinceService _stateProvinceService;
@@ -65,8 +66,8 @@ namespace Nop.Plugin.Payments.Square
             IGenericAttributeService genericAttributeService,
             ILocalizationService localizationService,
             ILogger logger,
-            IPaymentService paymentService,
-            IPageHeadBuilder pageHeadBuilder,
+            IOrderTotalCalculationService orderTotalCalculationService,
+            INopHtmlHelper nopHtmlHelper,
             ISettingService settingService,
             IScheduleTaskService scheduleTaskService,
             IStateProvinceService stateProvinceService,
@@ -82,8 +83,8 @@ namespace Nop.Plugin.Payments.Square
             _genericAttributeService = genericAttributeService;
             _localizationService = localizationService;
             _logger = logger;
-            _paymentService = paymentService;
-            _pageHeadBuilder = pageHeadBuilder;
+            _orderTotalCalculationService = orderTotalCalculationService;
+            _nopHtmlHelper = nopHtmlHelper;
             _settingService = settingService;
             _scheduleTaskService = scheduleTaskService;
             _stateProvinceService = stateProvinceService;
@@ -411,10 +412,10 @@ namespace Nop.Plugin.Payments.Square
         /// </summary>
         /// <param name="postProcessPaymentRequest">Payment info required for an order processing</param>
         /// <returns>A task that represents the asynchronous operation</returns>
-        public System.Threading.Tasks.Task PostProcessPaymentAsync(PostProcessPaymentRequest postProcessPaymentRequest)
+        public Task PostProcessPaymentAsync(PostProcessPaymentRequest postProcessPaymentRequest)
         {
             //do nothing
-            return System.Threading.Tasks.Task.CompletedTask;
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -427,7 +428,7 @@ namespace Nop.Plugin.Payments.Square
         /// </returns>
         public Task<bool> HidePaymentMethodAsync(IList<ShoppingCartItem> cart)
         {
-            return System.Threading.Tasks.Task.FromResult(false);
+            return Task.FromResult(false);
         }
 
         /// <summary>
@@ -437,7 +438,7 @@ namespace Nop.Plugin.Payments.Square
         /// <returns>The asynchronous task whose result contains the Additional handling fee</returns>
         public async Task<decimal> GetAdditionalHandlingFeeAsync(IList<ShoppingCartItem> cart)
         {
-            return await _paymentService.CalculateAdditionalFeeAsync(cart,
+            return await _orderTotalCalculationService.CalculatePaymentAdditionalFeeAsync(cart,
                 _squarePaymentSettings.AdditionalFee, _squarePaymentSettings.AdditionalFeePercentage);
         }
 
@@ -518,7 +519,7 @@ namespace Nop.Plugin.Payments.Square
             {
                 //change error notification to warning one (for the pending status)
                 if (paymentRefund.Status == SquarePaymentDefaults.REFUND_STATUS_PENDING)
-                    _pageHeadBuilder.AddCssFileParts(ResourceLocation.Head, @"~/Plugins/Payments.Square/Content/styles.css", null);
+                    _nopHtmlHelper.AddCssFileParts(@"~/Plugins/Payments.Square/Content/styles.css", null);
 
                 return new RefundPaymentResult { Errors = new[] { $"Refund is {paymentRefund.Status}" }.ToList() };
             }
@@ -581,7 +582,7 @@ namespace Nop.Plugin.Payments.Square
                 throw new ArgumentException(nameof(cancelPaymentRequest));
 
             //always success
-            return System.Threading.Tasks.Task.FromResult(new CancelRecurringPaymentResult());
+            return Task.FromResult(new CancelRecurringPaymentResult());
         }
 
         /// <summary>
@@ -594,7 +595,7 @@ namespace Nop.Plugin.Payments.Square
         /// </returns>
         public Task<bool> CanRePostProcessPaymentAsync(Order order)
         {
-            return System.Threading.Tasks.Task.FromResult(false);
+            return Task.FromResult(false);
         }
 
         /// <summary>
@@ -606,9 +607,9 @@ namespace Nop.Plugin.Payments.Square
         {
             //try to get errors
             if (form.TryGetValue(nameof(PaymentInfoModel.Errors), out var errorsString) && !StringValues.IsNullOrEmpty(errorsString))
-                return System.Threading.Tasks.Task.FromResult<IList<string>>(errorsString.ToString().Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList());
+                return Task.FromResult<IList<string>>(errorsString.ToString().Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).ToList());
 
-            return System.Threading.Tasks.Task.FromResult<IList<string>>(new List<string>());
+            return Task.FromResult<IList<string>>(new List<string>());
         }
 
         /// <summary>
@@ -660,7 +661,7 @@ namespace Nop.Plugin.Payments.Square
         /// Install the plugin
         /// </summary>
         /// <returns>A task that represents the asynchronous operation</returns>
-        public override async System.Threading.Tasks.Task InstallAsync()
+        public override async Task InstallAsync()
         {
             //settings
             await _settingService.SaveSettingAsync(new SquarePaymentSettings
@@ -683,7 +684,7 @@ namespace Nop.Plugin.Payments.Square
             }
 
             //locales
-            await _localizationService.AddLocaleResourceAsync(new Dictionary<string, string>
+            await _localizationService.AddOrUpdateLocaleResourceAsync(new Dictionary<string, string>
             {
                 ["Enums.Nop.Plugin.Payments.Square.Domain.TransactionMode.Authorize"] = "Authorize only",
                 ["Enums.Nop.Plugin.Payments.Square.Domain.TransactionMode.Charge"] = "Charge (authorize and capture)",
@@ -766,7 +767,7 @@ namespace Nop.Plugin.Payments.Square
         /// Uninstall the plugin
         /// </summary>
         /// <returns>A task that represents the asynchronous operation</returns>
-        public override async System.Threading.Tasks.Task UninstallAsync()
+        public override async Task UninstallAsync()
         {
             //settings
             await _settingService.DeleteSettingAsync<SquarePaymentSettings>();
