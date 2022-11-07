@@ -75,12 +75,12 @@ namespace Nop.Plugin.Payments.Square
         /// <summary>
         /// Path to the Square payment form js script
         /// </summary>
-        public static string PaymentFormScriptPath => "https://js.squareup.com/v2/paymentform";
+        public static string PaymentFormScriptPath => "https://web.squarecdn.com/v1/square.js";
 
         /// <summary>
         /// Path to the Square payment form js script
         /// </summary>
-        public static string SandboxPaymentFormScriptPath => "https://js.squareupsandbox.com/v2/paymentform";
+        public static string SandboxPaymentFormScriptPath => "https://sandbox.web.squarecdn.com/v1/square.js";
 
         /// <summary>
         /// Sandbox v2 BETA URL path

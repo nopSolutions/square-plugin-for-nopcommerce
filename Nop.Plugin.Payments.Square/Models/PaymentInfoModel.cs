@@ -56,6 +56,8 @@ namespace Nop.Plugin.Payments.Square.Models
         [NopResourceDisplayName("Plugins.Payments.Square.Fields.StoredCard")]
         public string StoredCardId { get; set; }
         public IList<SelectListItem> StoredCards { get; set; }
+        public string BillingAddressLine1 { get; set; }
+        public string BillingAddressLine2 { get; set; }
 
         #endregion
     }
