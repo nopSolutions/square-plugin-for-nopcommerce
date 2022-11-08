@@ -13,110 +13,135 @@
 }
 
 <style type="text/css">
-    .square-input {
+    select.square-input {
         height: 36px;
         border: 1px solid #ddd;
         padding: 8px;
         vertical-align: middle;
         color: #777;
-    }
-
-    select.square-input {
         width: 100%;
-    }
-
-    .square-input--focus {
-        border-color: #ccc;
-        color: #444;
-    }
-
-    .square-input--error {
-        outline: #e4434b;
     }
 </style>
 
 <script asp-location="Footer">
-    $(document).ready(function () {
+    const cardButton = $('input.payment-info-next-step-button')[0];
+
+    $(document).ready(async function () {
         $('#@Html.IdFor(model => model.StoredCardId)').on('change', toggleStoredCard);
         toggleStoredCard();
+
+        if (!window.Square) {
+            throw new Error('Square.js failed to load properly');
+        }
+
+        const cardClassSelectors = {
+            'input': {
+                fontSize: '15px',
+            },
+            'input.is-focus': {
+                color: '#444',
+            },
+            '.input-container': {
+                borderColor: '#ddd',
+                borderWidth: '1px',
+            },
+            '.input-container.is-focus': {
+                borderColor: '#ccc',
+            },
+            '.input-container.is-error': {
+                borderColor: '#e4434b',
+            },
+        }
+
+        const appId = '@squarePaymentSettings.ApplicationId';
+        const locationId = '@squarePaymentSettings.LocationId';
 
         var submitForm = false;
         var onePageCheckout = @orderSettings.OnePageCheckoutEnabled.ToString().ToLower();
         var use3ds = @squarePaymentSettings.Use3ds.ToString().ToLower();
         $('.payment-info-next-step-button').attr('onclick', null);
-        $('.payment-info-next-step-button').prop('disabled', true);
-        $('.payment-info-next-step-button').css("opacity", .3);
+        cardButton.disabled = true;
 
-        var paymentForm = new SqPaymentForm({
-            applicationId: '@squarePaymentSettings.ApplicationId',
-            locationId: '@squarePaymentSettings.LocationId',
-            inputClass: 'square-input',
-            inputStyles: [{
-                fontSize: '15px'
-            }],
-            cardNumber: {
-                elementId: 'square-card-number',
-                placeholder: '•••• •••• •••• ••••'
-            },
-            expirationDate: {
-                elementId: 'square-expiration-date',
-                placeholder: 'MM/YY'
-            },
-            cvv: {
-                elementId: 'square-cvv',
-                placeholder: 'CVV'
-            },
-            postalCode: {
-                elementId: 'square-postal-code'
-            },
-            callbacks: {
-                cardNonceResponseReceived: function (errors, nonce, cardData) {
-                    if (errors) {
-                        errors.forEach(function (error) {
-                            var currentErrorvalue = $('#@Html.IdFor(model => model.Errors)').val();
-                            $('#@Html.IdFor(model => model.Errors)').val(currentErrorvalue + '|' + error.message);
-                        });
-                        paymentForm.destroy();
-                        paymentForm = null;
-                        submitForm = true;
-                        $('input.payment-info-next-step-button').trigger("click");
-                    }
-                    else if (use3ds) {
-                        verifyBuyer(nonce);
-                    }
-                    else {
-                        $('#@Html.IdFor(model => model.CardNonce)').val(nonce);
-                        submitForm = true;
-                        $('input.payment-info-next-step-button').trigger("click");
-                    }
-                },
-
-                unsupportedBrowserDetected: function () {
-                    console.log('Browser is not supported');
-                },
-
-                paymentFormLoaded: function () {
-                    if (paymentForm) {
-                        paymentForm.setPostalCode('@Model.PostalCode');
-                    }
-                    $('.payment-info-next-step-button').prop('disabled', false);
-                    $('.payment-info-next-step-button').css("opacity", 1);
-                }
-            }
-        });
-        if (paymentForm) {
-            paymentForm.build();
+        async function initializeCard(payments) {
+            const card = await payments.card({ 'style': cardClassSelectors, 'postalCode': '@Model.PostalCode', });
+            await card.attach('#card-container');
+            return card;
         }
 
-        $('input.payment-info-next-step-button').on('click', function (data) {
+        async function tokenize(paymentMethod) {
+            const tokenResult = await paymentMethod.tokenize();
+            if (tokenResult.status === 'OK') {
+                return tokenResult.token;
+            } else {
+                let errorMessage = `Tokenization failed-status: ${tokenResult.status}`;
+                if (tokenResult.errors) {
+                    errorMessage += ` and errors: ${JSON.stringify(
+                        tokenResult.errors
+                    )}`;
+                }
+                throw new Error(errorMessage);
+            }
+        }
+
+        async function handlePaymentMethodSubmission(event, paymentMethod) {
+            event.preventDefault();
+
+            try {
+                // disable the submit button as we await tokenization and make a
+                // payment request.
+                cardButton.disabled = true;
+                const token = await tokenize(paymentMethod);
+                //const paymentResults = await createPayment(token);
+
+                if (token.errors) {
+                    var currentErrorvalue = $('#@Html.IdFor(model => model.Errors)').val();
+                    $('#@Html.IdFor(model => model.Errors)').val(currentErrorvalue + '|' + token.errors.message);
+                    card.destroy();
+                    card = null;
+                    submitForm = true;
+                    save_data();
+                } else if (use3ds) {
+                    $('#@Html.IdFor(model => model.CardNonce)').val(token);
+                    verifyBuyer(payments, token);
+                }
+                else {
+                    $('#@Html.IdFor(model => model.CardNonce)').val(token);
+                    submitForm = true;
+                    save_data();
+                }
+
+            } catch (e) {
+                cardButton.disabled = false;
+
+                var currentErrorvalue = $('#@Html.IdFor(model => model.Errors)').val();
+                $('#@Html.IdFor(model => model.Errors)').val(currentErrorvalue + '|' + e);
+                card.destroy();
+                card = null;
+                submitForm = true;
+                save_data();
+            }
+        }
+
+        const payments = window.Square.payments(appId, locationId);
+        let card;
+        try {
+            card = await initializeCard(payments);
+        } catch (e) {
+            console.error('Initializing Card failed', e);
+            return;
+        }
+
+        cardButton.disabled = false;
+
+        $('.payment-info-next-step-button').on('click', async function (event) {
             if (!submitForm) {
-                if (paymentForm) {
+                if (card) {
                     var selectedStoredCardId = $('#@Html.IdFor(model => model.StoredCardId)').val();
                     if ((!selectedStoredCardId || selectedStoredCardId == '@(Guid.Empty.ToString())')) {
-                        paymentForm.requestCardNonce();
+                        await handlePaymentMethodSubmission(event, card);
                         return false;
                     } else if (use3ds) {
-                        verifyBuyer(selectedStoredCardId);
+                        verifyBuyer(payments, selectedStoredCardId);
                         return false;
                     } else if (onePageCheckout) {
                         PaymentInfo.save();
@@ -129,11 +154,18 @@
             }
         });
 
+        function save_data() {
+            if (onePageCheckout) {
+                submitForm = false;
+                PaymentInfo.save();
+            }
+        }
+
         $(document).on('accordion_section_opened', function (data) {
             if (data.currentSectionId != 'opc-confirm_order' && data.currentSectionId != 'opc-payment_info') {
-                if (paymentForm) {
-                    paymentForm.destroy();
-                    paymentForm = null;
+                if (card) {
+                    card.destroy();
+                    card = null;
                 }
                 $('.payment-info-next-step-button').attr('onclick', 'PaymentInfo.save()');
             }
@@ -142,12 +174,12 @@
             }
         });
 
-        function verifyBuyer(nonce) {
+        async function verifyBuyer(payments, token) {
             const verificationDetails = {
                 intent: 'CHARGE',
                 amount: '@Model.OrderTotal',
                 currencyCode: '@Model.Currency',
-                billingContact: {
+                billingContact: {                    
                     givenName: '@Model.BillingFirstName',
                     familyName: '@Model.BillingLastName',
                     email: '@Model.BillingEmail',
@@ -158,33 +190,24 @@
                 }
             };
 
-            paymentForm.verifyBuyer(nonce, verificationDetails,
-                function(err, verificationResult) {
-                    if (err) {
-                        $('#@Html.IdFor(model => model.Errors)').val($('#@Html.IdFor(model => model.Errors)').val() + '|' + err.message);
-                        paymentForm.destroy();
-                        paymentForm = null;
-                    }
-                    else {
-                        if (nonce.indexOf('cnon:') === 0) {
-                            $('#@Html.IdFor(model => model.CardNonce)').val(nonce);
-                        }
-
-                        $('#@Html.IdFor(model => model.Token)').val(verificationResult.token);
-                    }
-                    submitForm = true;
-                    $('input.payment-info-next-step-button').trigger("click");
-                }
+            const verificationResults = await payments.verifyBuyer(
+                token,
+                verificationDetails
             );
+
+            $('#@Html.IdFor(model => model.Token)').val(verificationResults.token);
+            submitForm = true;
+            save_data();
         }
+
     });
 
     function toggleStoredCard() {
         var selectedStoredCardId = $('#@Html.IdFor(model => model.StoredCardId)').val();
         if (!selectedStoredCardId || selectedStoredCardId == '@(Guid.Empty.ToString())') {
-            $('#square-card-details').show();
+            $('#payment-form').show();
         } else {
-            $('#square-card-details').hide();
+            $('#payment-form').hide();
         }
     }
 </script>
@@ -207,41 +230,14 @@
     </table>
 }
 
-<table width="100%" cellspacing="2" cellpadding="1" border="0" id="square-card-details">
-    <tr>
-        <td>
-            <label>@T("Payment.CardNumber"):</label>
-        </td>
-        <td>
-            <div id="square-card-number" style="width:165px;"></div>
-        </td>
-    </tr>
-    <tr>
-        <td>
-            <label>@T("Payment.ExpirationDate"):</label>
-        </td>
-        <td>
-            <div id="square-expiration-date"></div>
-        </td>
-    </tr>
-    <tr>
-        <td>
-            <label>@T("Payment.CardCode"):</label>
-        </td>
-        <td>
-            <div id="square-cvv" style="width:60px;"></div>
-        </td>
-    </tr>
-    <tr>
-        <td>
-            <label asp-for="PostalCode">@T("Plugins.Payments.Square.Fields.PostalCode"):</label>
-        </td>
-        <td>
-            <div id="square-postal-code"></div>
-        </td>
-    </tr>
-    @if (!Model.IsGuest)
-    {
+<form id="payment-form">
+    <div id="card-container"></div>
+</form>
+<div id="payment-status-container"></div>
+
+@if (!Model.IsGuest)
+{
+    <table width="100%" cellspacing="2" cellpadding="1" border="0" id="square-card-details">
         <tr>
             <td>
                 <label asp-for="SaveCard">@T("Plugins.Payments.Square.Fields.SaveCard"):</label>
@@ -251,10 +247,11 @@
                 <span asp-validation-for="SaveCard"></span>
             </td>
         </tr>
-    }
-</table>
+    </table>
+}
+
 
 @if (orderSettings.OnePageCheckoutEnabled)
 {
-    @Html.NopInlineScripts(ResourceLocation.Footer)
+    @Html.NopInlineScripts(ResourceLocation.Footer);
 }
