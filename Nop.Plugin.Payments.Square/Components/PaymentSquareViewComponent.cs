@@ -133,6 +133,8 @@ namespace Nop.Plugin.Payments.Square.Components
                 model.BillingState = stateProvince?.Abbreviation;
                 model.BillingCity = billingAddress?.City;
                 model.BillingPostalCode = billingAddress?.ZipPostalCode;
+                model.BillingAddressLine1 = billingAddress?.Address1 ?? string.Empty;
+                model.BillingAddressLine2 = billingAddress?.Address2 ?? string.Empty; 
             }
 
             return View("~/Plugins/Payments.Square/Views/PaymentInfo.cshtml", model);
