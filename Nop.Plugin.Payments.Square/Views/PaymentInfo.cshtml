@@ -1,16 +1,11 @@
 ﻿@model PaymentInfoModel
 
-@using Nop.Plugin.Payments.Square
-@using Nop.Plugin.Payments.Square.Models
-@inject SquarePaymentSettings squarePaymentSettings
-@inject Nop.Core.Domain.Orders.OrderSettings orderSettings
-
 @{
     Layout = "";
-    NopHtml.AddScriptParts(ResourceLocation.Footer,
-        squarePaymentSettings.UseSandbox ? SquarePaymentDefaults.SandboxPaymentFormScriptPath : SquarePaymentDefaults.PaymentFormScriptPath,
-        excludeFromBundle: true);
+    var scriptUrl = settings.UseSandbox ? SquarePaymentDefaults.SandboxPaymentFormScriptPath : SquarePaymentDefaults.PaymentFormScriptPath;
 }
+
+<script src="@scriptUrl" asp-exclude-from-bundle="true" asp-location="Footer"></script>
 
 <style type="text/css">
     select.square-input {
@@ -24,52 +19,46 @@
 </style>
 
 <script asp-location="Footer">
-    const cardButton = $('button.payment-info-next-step-button')[0];
-
     $(document).ready(async function () {
         $('#@Html.IdFor(model => model.StoredCardId)').on('change', toggleStoredCard);
         toggleStoredCard();
 
         if (!window.Square) {
-            throw new Error('Square.js failed to load properly');
+            console.error('Square.js failed to load properly');
         }
 
-        const cardClassSelectors = {
-            'input': {
-                fontSize: '15px',
-            },
-            'input.is-focus': {
-                color: '#444',
-            },
-            '.input-container': {
-                borderColor: '#ddd',
-                borderWidth: '1px',
-            },
-            '.input-container.is-focus': {
-                borderColor: '#ccc',
-            },
-            '.input-container.is-error': {
-                borderColor: '#e4434b',
-            },
-        }
-
-        const appId = '@squarePaymentSettings.ApplicationId';
-        const locationId = '@squarePaymentSettings.LocationId';
-
-        var submitForm = false;
-        var onePageCheckout = @orderSettings.OnePageCheckoutEnabled.ToString().ToLower();
-        var use3ds = @squarePaymentSettings.Use3ds.ToString().ToLower();
-        $('.payment-info-next-step-button').attr('onclick', null);
-        cardButton.disabled = true;
+        $('.payment-info-next-step-button').hide();
+        displayAjaxLoading(true);
+        var use3ds = @settings.Use3ds.ToString().ToLower();
+        var payButton = $('#pay-button');
 
         async function initializeCard(payments) {
-            const card = await payments.card({ 'style': cardClassSelectors, 'postalCode': '@Model.PostalCode', });
+            var cardClassSelectors = {
+                'input': {
+                    fontSize: '15px',
+                },
+                'input.is-focus': {
+                    color: '#444',
+                },
+                '.input-container': {
+                    borderColor: '#ddd',
+                    borderWidth: '1px',
+                },
+                '.input-container.is-focus': {
+                    borderColor: '#ccc',
+                },
+                '.input-container.is-error': {
+                    borderColor: '#e4434b',
+                },
+            }
+
+            var card = await payments.card({ 'style': cardClassSelectors, 'postalCode': '@Model.PostalCode', });
             await card.attach('#card-container');
             return card;
         }
 
         async function tokenize(paymentMethod) {
-            const tokenResult = await paymentMethod.tokenize();
+            var tokenResult = await paymentMethod.tokenize();
             if (tokenResult.status === 'OK') {
                 return tokenResult.token;
             } else {
@@ -79,50 +68,31 @@
                         tokenResult.errors
                     )}`;
                 }
-                throw new Error(errorMessage);
+                console.error(errorMessage);
             }
         }
 
-        async function handlePaymentMethodSubmission(event, paymentMethod) {
-            event.preventDefault();
-
+        async function handlePaymentMethodSubmission(paymentMethod) {
             try {
-                // disable the submit button as we await tokenization and make a
-                // payment request.
-                cardButton.disabled = true;
-                const token = await tokenize(paymentMethod);
-                //const paymentResults = await createPayment(token);
+                var token = await tokenize(paymentMethod);
 
                 if (token.errors) {
                     var currentErrorvalue = $('#@Html.IdFor(model => model.Errors)').val();
                     $('#@Html.IdFor(model => model.Errors)').val(currentErrorvalue + '|' + token.errors.message);
-                    card.destroy();
-                    card = null;
-                    submitForm = true;
-                    save_data();
                 } else if (use3ds) {
                     $('#@Html.IdFor(model => model.CardNonce)').val(token);
-                    verifyBuyer(payments, token);
+                    await verifyBuyer(payments, token);
                 }
                 else {
                     $('#@Html.IdFor(model => model.CardNonce)').val(token);
-                    submitForm = true;
-                    save_data();
                 }
-
             } catch (e) {
-                cardButton.disabled = false;
-
                 var currentErrorvalue = $('#@Html.IdFor(model => model.Errors)').val();
                 $('#@Html.IdFor(model => model.Errors)').val(currentErrorvalue + '|' + e);
-                card.destroy();
-                card = null;
-                submitForm = true;
-                save_data();
             }
         }
 
-        const payments = window.Square.payments(appId, locationId);
+        var payments = window.Square.payments('@settings.ApplicationId', '@settings.LocationId');
         let card;
         try {
             card = await initializeCard(payments);
@@ -130,53 +100,23 @@
             console.error('Initializing Card failed', e);
             return;
         }
+        displayAjaxLoading(false);
 
-        cardButton.disabled = false;
-
-        $('.payment-info-next-step-button').on('click', async function (event) {
-            if (!submitForm) {
-                if (card) {
-                    var selectedStoredCardId = $('#@Html.IdFor(model => model.StoredCardId)').val();
-                    if ((!selectedStoredCardId || selectedStoredCardId == '@(Guid.Empty.ToString())')) {
-                        await handlePaymentMethodSubmission(event, card);
-                        return false;
-                    } else if (use3ds) {
-                        verifyBuyer(payments, selectedStoredCardId);
-                        return false;
-                    } else if (onePageCheckout) {
-                        PaymentInfo.save();
-                    }
-                }
+        payButton.click(async function () {
+            displayAjaxLoading(true);
+            var selectedStoredCardId = $('#@Html.IdFor(model => model.StoredCardId)').val();
+            if ((!selectedStoredCardId || selectedStoredCardId == '@(Guid.Empty.ToString())')) {
+                await handlePaymentMethodSubmission(card);
+            } else if (use3ds) {
+                await verifyBuyer(payments, selectedStoredCardId);
             }
-            else if (onePageCheckout) {
-                submitForm = false;
-                PaymentInfo.save();
-            }
-        });
-
-        function save_data() {
-            if (onePageCheckout) {
-                submitForm = false;
-                PaymentInfo.save();
-            }
-        }
-
-        $(document).on('accordion_section_opened', function (data) {
-            if (data.currentSectionId != 'opc-confirm_order' && data.currentSectionId != 'opc-payment_info') {
-                if (card) {
-                    card.destroy();
-                    card = null;
-                }
-                $('.payment-info-next-step-button').attr('onclick', 'PaymentInfo.save()');
-            }
-            if (data.currentSectionId == 'opc-payment_info' && data.previousSectionId == 'opc-confirm_order') {
-                $('.payment-info-next-step-button').attr('onclick', null);
-            }
+            displayAjaxLoading(false);
+            $('.payment-info-next-step-button').click();
         });
 
         async function verifyBuyer(payments, token) {
-            const verificationDetails = {
-                intent: 'CHARGE',
+            var verificationDetails = {
+                intent: '@settings.TransactionMode.ToString().ToUpper()',
                 amount: '@Model.OrderTotal',
                 currencyCode: '@Model.Currency',
                 billingContact: {
@@ -191,14 +131,9 @@
                 }
             };
 
-            const verificationResults = await payments.verifyBuyer(
-                token,
-                verificationDetails
-            );
+            var verificationResults = await payments.verifyBuyer(token, verificationDetails);
 
             $('#@Html.IdFor(model => model.Token)').val(verificationResults.token);
-            submitForm = true;
-            save_data();
         }
 
     });
@@ -213,9 +148,9 @@
     }
 </script>
 
-<input type="hidden" asp-for="CardNonce">
-<input type="hidden" asp-for="Errors">
-<input type="hidden" asp-for="Token">
+<input type="hidden" asp-for="CardNonce" />
+<input type="hidden" asp-for="Errors" />
+<input type="hidden" asp-for="Token" />
 
 @if (!Model.IsGuest && Model.StoredCards.Any())
 {
@@ -231,9 +166,9 @@
     </table>
 }
 
-<form id="payment-form">
+<div id="payment-form">
     <div id="card-container"></div>
-</form>
+</div>
 <div id="payment-status-container"></div>
 
 @if (!Model.IsGuest)
@@ -251,6 +186,9 @@
     </table>
 }
 
+<div class="buttons">
+    <button type="button" class="button-1 square-btn" id="pay-button">@T(orderSettings.OnePageCheckoutEnabled ? "Common.Continue" : "Checkout.NextButton")</button>
+</div>
 
 @if (orderSettings.OnePageCheckoutEnabled)
 {

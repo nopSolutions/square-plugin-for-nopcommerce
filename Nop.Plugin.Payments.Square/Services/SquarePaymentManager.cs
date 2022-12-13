@@ -408,7 +408,7 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <returns>The asynchronous task whose result contains the URL</returns>
         public async Task<string> GenerateAuthorizeUrlAsync(int storeId)
         {
-            var serviceUrl = $"{_squareAuthorizationHttpClient.BaseAddress}authorize";
+            var serviceUrl = "https://squareup.com/t/cmtp_performance/pr_cross_product/d_partnerships/p_nopcommerce/l_us/";
 
             //list of all available permission scopes
             var permissionScopes = new List<string>
@@ -467,6 +467,9 @@ namespace Nop.Plugin.Payments.Square.Services
             //create query parameters for the request
             var queryParameters = new Dictionary<string, string>
             {
+                //Route.
+                ["route"] = "oauth2/authorize",
+
                 //The application ID.
                 ["client_id"] = settings.ApplicationId,
 

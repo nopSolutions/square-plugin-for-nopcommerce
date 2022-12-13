@@ -83,11 +83,6 @@ namespace Nop.Plugin.Payments.Square
         public static string SandboxPaymentFormScriptPath => "https://sandbox.web.squarecdn.com/v1/square.js";
 
         /// <summary>
-        /// Sandbox v2 BETA URL path
-        /// </summary>
-        public static string SandboxBaseUrl => "https://connect.squareupsandbox.com";
-
-        /// <summary>
         /// Key of the attribute to store Square customer identifier
         /// </summary>
         public static string CustomerIdAttribute => "SquareCustomerId";

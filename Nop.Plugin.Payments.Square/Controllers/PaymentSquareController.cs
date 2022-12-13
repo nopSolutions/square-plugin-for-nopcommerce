@@ -128,7 +128,7 @@ namespace Nop.Plugin.Payments.Square.Controllers
             if (!settings.UseSandbox && settings.RefreshToken == Guid.Empty.ToString())
             {
                 var migrateMessage = $"Your access token is deprecated.<br /> " +
-                    $"1. In the <a href=\"http://squ.re/nopcommerce1\" target=\"_blank\">Square Developer Portal</a> make sure your application is on Connect API version 2019-03-13 or later.<br /> " +
+                    $"1. In the <a href=\"https://squareup.com/t/cmtp_performance/pr_developers/d_partnerships/p_nopcommerce/?route=developer\" target=\"_blank\">Square Developer Portal</a> make sure your application is on Connect API version 2019-03-13 or later.<br /> " +
                     $"2. On this page click 'Obtain access token' below.<br />";
                 _notificationService.ErrorNotification(migrateMessage, encode: false);
             }
