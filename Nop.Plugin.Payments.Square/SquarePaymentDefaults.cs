@@ -8,51 +8,6 @@ namespace Nop.Plugin.Payments.Square
     public class SquarePaymentDefaults
     {
         /// <summary>
-        /// Name of the view component to display plugin in public store
-        /// </summary>
-        public const string VIEW_COMPONENT_NAME = "PaymentSquare";
-
-        /// <summary>
-        /// Payment status "APPROVED"
-        /// </summary>
-        public const string PAYMENT_APPROVED_STATUS = "APPROVED";
-
-        /// <summary>
-        /// Payment status "COMPLETED"
-        /// </summary>
-        public const string PAYMENT_COMPLETED_STATUS = "COMPLETED";
-
-        /// <summary>
-        /// Payment status "FAILED"
-        /// </summary>
-        public const string PAYMENT_FAILED_STATUS = "FAILED";
-
-        /// <summary>
-        /// Payment status "CANCELED"
-        /// </summary>
-        public const string PAYMENT_CANCELED_STATUS = "CANCELED";
-
-        /// <summary>
-        /// Location status "ACTIVE"
-        /// </summary>
-        public const string LOCATION_STATUS_ACTIVE = "ACTIVE";
-
-        /// <summary>
-        /// Location capability "CREDIT_CARD_PROCESSING"
-        /// </summary>
-        public const string LOCATION_CAPABILITIES_PROCESSING = "CREDIT_CARD_PROCESSING";
-
-        /// <summary>
-        /// Refund status "PENDING"
-        /// </summary>
-        public const string REFUND_STATUS_PENDING = "PENDING";
-
-        /// <summary>
-        /// Refund status "COMPLETED"
-        /// </summary>
-        public const string REFUND_STATUS_COMPLETED = "COMPLETED";
-
-        /// <summary>
         /// Square payment method system name
         /// </summary>
         public static string SystemName => "Payments.Square";
@@ -95,22 +50,8 @@ namespace Nop.Plugin.Payments.Square
         /// <summary>
         /// Name of the renew access token schedule task
         /// </summary>
-        public static string RenewAccessTokenTaskName => "Renew access token (Square payment)";
-
-        /// <summary>
-        /// Type of the renew access token schedule task
-        /// </summary>
-        public static string RenewAccessTokenTask => "Nop.Plugin.Payments.Square.Services.RenewAccessTokenTask";
-
-        /// <summary>
-        /// Default access token renewal period in days
-        /// </summary>
-        public static int AccessTokenRenewalPeriodRecommended => 14;
-
-        /// <summary>
-        /// Max access token renewal period in days
-        /// </summary>
-        public static int AccessTokenRenewalPeriodMax => 30;
+        public static (string Name, string Type, int Period, int MaxPeriod) RenewAccessTokenTask =>
+            ("Renew access token (Square payment)", "Nop.Plugin.Payments.Square.Services.RenewAccessTokenTask", 14, 30);
 
         /// <summary>
         /// Sandbox credentials should start with this prefix
@@ -124,5 +65,48 @@ namespace Nop.Plugin.Payments.Square
         /// {0} : Order Guid
         /// </remarks>
         public static string PaymentNote => "nopCommerce: {0}";
+
+        public class Status
+        {
+            /// <summary>
+            /// Payment status "APPROVED"
+            /// </summary>
+            public const string PAYMENT_APPROVED = "APPROVED";
+
+            /// <summary>
+            /// Payment status "COMPLETED"
+            /// </summary>
+            public const string PAYMENT_COMPLETED = "COMPLETED";
+
+            /// <summary>
+            /// Payment status "FAILED"
+            /// </summary>
+            public const string PAYMENT_FAILED = "FAILED";
+
+            /// <summary>
+            /// Payment status "CANCELED"
+            /// </summary>
+            public const string PAYMENT_CANCELED = "CANCELED";
+
+            /// <summary>
+            /// Location status "ACTIVE"
+            /// </summary>
+            public const string LOCATION_ACTIVE = "ACTIVE";
+
+            /// <summary>
+            /// Location capability "CREDIT_CARD_PROCESSING"
+            /// </summary>
+            public const string LOCATION_PROCESSING = "CREDIT_CARD_PROCESSING";
+
+            /// <summary>
+            /// Refund status "PENDING"
+            /// </summary>
+            public const string REFUND_PENDING = "PENDING";
+
+            /// <summary>
+            /// Refund status "COMPLETED"
+            /// </summary>
+            public const string REFUND_COMPLETED = "COMPLETED";
+        }
     }
 }

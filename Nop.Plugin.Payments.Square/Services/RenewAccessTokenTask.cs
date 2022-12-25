@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Nop.Core;
 using Nop.Services.Configuration;
 using Nop.Services.Localization;
@@ -19,9 +20,9 @@ namespace Nop.Plugin.Payments.Square.Services
         private readonly ILogger _logger;
         private readonly IPaymentPluginManager _paymentPluginManager;
         private readonly ISettingService _settingService;
+        private readonly IStoreContext _storeContext;
         private readonly SquarePaymentManager _squarePaymentManager;
         private readonly SquarePaymentSettings _squarePaymentSettings;
-        private readonly IStoreContext _storeContext;
 
         #endregion
 
@@ -31,17 +32,17 @@ namespace Nop.Plugin.Payments.Square.Services
             ILogger logger,
             IPaymentPluginManager paymentPluginManager,
             ISettingService settingService,
+            IStoreContext storeContext,
             SquarePaymentManager squarePaymentManager,
-            SquarePaymentSettings squarePaymentSettings,
-            IStoreContext storeContext)
+            SquarePaymentSettings squarePaymentSettings)
         {
             _localizationService = localizationService;
             _logger = logger;
             _paymentPluginManager = paymentPluginManager;
             _settingService = settingService;
+            _storeContext = storeContext;
             _squarePaymentManager = squarePaymentManager;
             _squarePaymentSettings = squarePaymentSettings;
-            _storeContext = storeContext;
         }
 
         #endregion
@@ -51,7 +52,8 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <summary>
         /// Executes a task
         /// </summary>
-        public async System.Threading.Tasks.Task ExecuteAsync()
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task ExecuteAsync()
         {
             //whether plugin is active
             if (!await _paymentPluginManager.IsPluginActiveAsync(SquarePaymentDefaults.SystemName))

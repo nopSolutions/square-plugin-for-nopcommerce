@@ -16,8 +16,9 @@ namespace Nop.Plugin.Payments.Square.Infrastructure
         public void RegisterRoutes(IEndpointRouteBuilder endpointRouteBuilder)
         {
             //add route for the access token callback
-            endpointRouteBuilder.MapControllerRoute(SquarePaymentDefaults.AccessTokenRoute, "Plugins/PaymentSquare/AccessToken/",
-                new { controller = "PaymentSquare", action = "AccessTokenCallback" });
+            endpointRouteBuilder.MapControllerRoute(name: SquarePaymentDefaults.AccessTokenRoute,
+                pattern: "Plugins/PaymentSquare/AccessToken/",
+                defaults: new { controller = "PaymentSquare", action = "AccessTokenCallback" });
         }
 
         /// <summary>

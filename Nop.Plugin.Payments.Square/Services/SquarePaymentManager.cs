@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.WebUtilities;
 using Nop.Core;
@@ -21,23 +22,23 @@ namespace Nop.Plugin.Payments.Square.Services
         #region Fields
 
         private readonly ILogger _logger;
+        private readonly ISettingService _settingService;
         private readonly IWorkContext _workContext;
         private readonly SquareAuthorizationHttpClient _squareAuthorizationHttpClient;
-        private readonly ISettingService _settingService;
 
         #endregion
 
         #region Ctor
 
         public SquarePaymentManager(ILogger logger,
+            ISettingService settingService,
             IWorkContext workContext,
-            SquareAuthorizationHttpClient squareAuthorizationHttpClient,
-            ISettingService settingService)
+            SquareAuthorizationHttpClient squareAuthorizationHttpClient)
         {
             _logger = logger;
+            _settingService = settingService;
             _workContext = workContext;
             _squareAuthorizationHttpClient = squareAuthorizationHttpClient;
-            _settingService = settingService;
         }
 
         #endregion
@@ -60,7 +61,7 @@ namespace Nop.Plugin.Payments.Square.Services
             var client = new SquareClient.Builder()
                 .AccessToken(settings.AccessToken)
                 .AddAdditionalHeader("user-agent", SquarePaymentDefaults.UserAgent);
-            
+
             if (settings.UseSandbox)
                 client.Environment(SquareSdk.Environment.Sandbox);
             else
@@ -125,8 +126,8 @@ namespace Nop.Plugin.Payments.Square.Services
 
                 var location = locationResponse.Location;
                 if (location == null
-                      || location.Status != SquarePaymentDefaults.LOCATION_STATUS_ACTIVE
-                      || (!location.Capabilities?.Contains(SquarePaymentDefaults.LOCATION_CAPABILITIES_PROCESSING) ?? true))
+                      || location.Status != SquarePaymentDefaults.Status.LOCATION_ACTIVE
+                      || (!location.Capabilities?.Contains(SquarePaymentDefaults.Status.LOCATION_PROCESSING) ?? true))
                 {
                     throw new NopException("There are no selected active location for the account");
                 }
@@ -159,8 +160,10 @@ namespace Nop.Plugin.Payments.Square.Services
                 ThrowErrorsIfExists(listLocationsResponse.Errors);
 
                 //filter active locations and locations that can process credit cards
-                var activeLocations = listLocationsResponse.Locations?.Where(location => location?.Status == SquarePaymentDefaults.LOCATION_STATUS_ACTIVE
-                    && (location.Capabilities?.Contains(SquarePaymentDefaults.LOCATION_CAPABILITIES_PROCESSING) ?? false)).ToList();
+                var activeLocations = listLocationsResponse.Locations
+                    ?.Where(location => location?.Status == SquarePaymentDefaults.Status.LOCATION_ACTIVE &&
+                        (location.Capabilities?.Contains(SquarePaymentDefaults.Status.LOCATION_PROCESSING) ?? false))
+                    .ToList();
                 if (!activeLocations?.Any() ?? true)
                     throw new NopException("There are no active locations for the account");
 
@@ -242,25 +245,20 @@ namespace Nop.Plugin.Payments.Square.Services
         /// <summary>
         /// Create the new card of the customer
         /// </summary>
-        /// <param name="customerId">Customer ID</param>
         /// <param name="cardRequest">Request parameters to create card of the customer</param>
         /// <param name="storeId">Store identifier for which customer card should be created</param>
         /// <returns>The asynchronous task whose result contains the Card</returns>
-        public async Task<Card> CreateCustomerCardAsync(string customerId, CreateCustomerCardRequest cardRequest, int storeId)
+        public async Task<Card> CreateCustomerCardAsync(CreateCardRequest cardRequest, int storeId)
         {
             if (cardRequest == null)
                 throw new ArgumentNullException(nameof(cardRequest));
-
-            //whether passed customer identifier exists
-            if (string.IsNullOrEmpty(customerId))
-                return null;
 
             var client = await CreateSquareClientAsync(storeId);
 
             try
             {
                 //create the new card of the customer
-                var createCustomerCardResponse = client.CustomersApi.CreateCustomerCard(customerId, cardRequest);
+                var createCustomerCardResponse = client.CardsApi.CreateCard(cardRequest);
                 if (createCustomerCardResponse == null)
                     throw new NopException("No service response");
 
@@ -313,9 +311,10 @@ namespace Nop.Plugin.Payments.Square.Services
         /// Completes a payment
         /// </summary>
         /// <param name="paymentId">Payment ID</param>
+        /// <param name="completePaymentRequest">Complete payment request</param>
         /// <param name="storeId">Store identifier for which payment should be completed</param>
         /// <returns>The asynchronous task whose result contains the True if the payment successfully completed; otherwise false. And/or errors if exist</returns>
-        public async Task<(bool, string)> CompletePaymentAsync(string paymentId, int storeId)
+        public async Task<(bool, string)> CompletePaymentAsync(string paymentId, CompletePaymentRequest completePaymentRequest, int storeId)
         {
             if (string.IsNullOrEmpty(paymentId))
                 return (false, null);
@@ -324,7 +323,7 @@ namespace Nop.Plugin.Payments.Square.Services
 
             try
             {
-                var paymentResponse = await client .PaymentsApi.CompletePaymentAsync(paymentId, new System.Threading.CancellationToken());
+                var paymentResponse = await client.PaymentsApi.CompletePaymentAsync(paymentId, completePaymentRequest, new CancellationToken());
                 if (paymentResponse == null)
                     throw new NopException("No service response");
 
@@ -397,6 +396,7 @@ namespace Nop.Plugin.Payments.Square.Services
                 return (null, await CatchExceptionAsync(exception));
             }
         }
+
         #endregion
 
         #region OAuth2 authorization

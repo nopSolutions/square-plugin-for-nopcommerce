@@ -7,11 +7,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 using Nop.Core;
 using Nop.Core.Domain.Common;
-using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Directory;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Payments;
 using Nop.Core.Domain.ScheduleTasks;
+using Nop.Plugin.Payments.Square.Components;
 using Nop.Plugin.Payments.Square.Domain;
 using Nop.Plugin.Payments.Square.Extensions;
 using Nop.Plugin.Payments.Square.Models;
@@ -126,10 +126,10 @@ namespace Nop.Plugin.Payments.Square
         {
             return status switch
             {
-                SquarePaymentDefaults.PAYMENT_APPROVED_STATUS => PaymentStatus.Authorized,
-                SquarePaymentDefaults.PAYMENT_COMPLETED_STATUS => PaymentStatus.Paid,
-                SquarePaymentDefaults.PAYMENT_FAILED_STATUS => PaymentStatus.Pending,
-                SquarePaymentDefaults.PAYMENT_CANCELED_STATUS => PaymentStatus.Voided,
+                SquarePaymentDefaults.Status.PAYMENT_APPROVED => PaymentStatus.Authorized,
+                SquarePaymentDefaults.Status.PAYMENT_COMPLETED => PaymentStatus.Paid,
+                SquarePaymentDefaults.Status.PAYMENT_FAILED => PaymentStatus.Pending,
+                SquarePaymentDefaults.Status.PAYMENT_CANCELED => PaymentStatus.Voided,
                 _ => PaymentStatus.Pending,
             };
         }
@@ -210,23 +210,23 @@ namespace Nop.Plugin.Payments.Square
 
                 return new SquareModel.Address
                 (
-                    addressLine1: address.Address1,
-                    addressLine2: address.Address2,
-                    administrativeDistrictLevel1: (await _stateProvinceService.GetStateProvinceByAddressAsync(address))?.Abbreviation,
-                    administrativeDistrictLevel2: address.County,
+                    addressLine1: CommonHelper.EnsureMaximumLength(address.Address1, 500),
+                    addressLine2: CommonHelper.EnsureMaximumLength(address.Address2, 500),
+                    administrativeDistrictLevel1: CommonHelper.EnsureMaximumLength((await _stateProvinceService.GetStateProvinceByAddressAsync(address))?.Abbreviation, 200),
+                    administrativeDistrictLevel2: CommonHelper.EnsureMaximumLength(address.County, 200),
                     country: string.Equals(country?.TwoLetterIsoCode, new RegionInfo(country?.TwoLetterIsoCode).TwoLetterISORegionName, StringComparison.InvariantCultureIgnoreCase)
                         ? country?.TwoLetterIsoCode : null,
-                    firstName: address.FirstName,
-                    lastName: address.LastName,
-                    locality: address.City,
-                    postalCode: address.ZipPostalCode
+                    firstName: CommonHelper.EnsureMaximumLength(address.FirstName, 300),
+                    lastName: CommonHelper.EnsureMaximumLength(address.LastName, 300),
+                    locality: CommonHelper.EnsureMaximumLength(address.City, 300),
+                    postalCode: CommonHelper.EnsureMaximumLength(address.ZipPostalCode, 12)
                 );
             }
 
             var customerBillingAddress = await _customerService.GetCustomerBillingAddressAsync(customer);
             var customerShippingAddress = await _customerService.GetCustomerShippingAddressAsync(customer);
 
-            var billingAddress = await createAddressAsync (customerBillingAddress);
+            var billingAddress = await createAddressAsync(customerBillingAddress);
             var shippingAddress = billingAddress == null ? await createAddressAsync(customerShippingAddress) : null;
             var email = customerBillingAddress != null ? customerBillingAddress.Email : customerShippingAddress?.Email;
 
@@ -317,11 +317,11 @@ namespace Nop.Plugin.Payments.Square
                         //try to create the new one for current store, if not exists
                         var customerRequestBuilder = new SquareModel.CreateCustomerRequest.Builder()
                             .EmailAddress(customer.Email)
-                            .Nickname(customer.Username)
-                            .GivenName(await _genericAttributeService.GetAttributeAsync<string>(customer, NopCustomerDefaults.FirstNameAttribute))
-                            .FamilyName(await _genericAttributeService.GetAttributeAsync<string>(customer, NopCustomerDefaults.LastNameAttribute))
-                            .PhoneNumber(await _genericAttributeService.GetAttributeAsync<string>(customer, NopCustomerDefaults.PhoneAttribute))
-                            .CompanyName(await _genericAttributeService.GetAttributeAsync<string>(customer, NopCustomerDefaults.CompanyAttribute))
+                            .Nickname(CommonHelper.EnsureMaximumLength(customer.Username, 100))
+                            .GivenName(CommonHelper.EnsureMaximumLength(customer.FirstName, 300))
+                            .FamilyName(CommonHelper.EnsureMaximumLength(customer.LastName, 300))
+                            .PhoneNumber(customer.Phone)
+                            .CompanyName(CommonHelper.EnsureMaximumLength(customer.Company, 500))
                             .ReferenceId(customer.CustomerGuid.ToString());
 
                         squareCustomer = await _squarePaymentManager.CreateCustomerAsync(customerRequestBuilder.Build(), storeId);
@@ -333,8 +333,8 @@ namespace Nop.Plugin.Payments.Square
                     }
 
                     //create request parameters to create the new card
-                    var cardRequestBuilder = new SquareModel.CreateCustomerCardRequest.Builder(cardNonce.ToString())
-                        .VerificationToken(token?.ToString());
+                    var cardRequestBuilder = new SquareModel.Card.Builder()
+                        .CustomerId(squareCustomer.Id);
 
                     var cardBillingAddress = billingAddress ?? shippingAddress;
 
@@ -348,14 +348,19 @@ namespace Nop.Plugin.Payments.Square
                         cardBillingAddress ??= new SquareModel.Address();
                         cardBillingAddress = cardBillingAddress
                             .ToBuilder()
-                            .PostalCode(postalCode.ToString())
+                            .PostalCode(CommonHelper.EnsureMaximumLength(postalCode.ToString(), 12))
                             .Build();
                     }
 
                     cardRequestBuilder.BillingAddress(cardBillingAddress);
 
                     //try to create card for current store
-                    var card = await _squarePaymentManager.CreateCustomerCardAsync(squareCustomer.Id, cardRequestBuilder.Build(), storeId);
+                    var createCardRequestBuilder = new SquareModel.CreateCardRequest.Builder(
+                        idempotencyKey: Guid.NewGuid().ToString(),
+                        sourceId: cardNonce.ToString(),
+                        card: cardRequestBuilder.Build())
+                        .VerificationToken(token?.ToString());
+                    var card = await _squarePaymentManager.CreateCustomerCardAsync(createCardRequestBuilder.Build(), storeId);
                     if (card == null)
                         throw new NopException("Failed to create card. Error details in the log");
 
@@ -455,7 +460,8 @@ namespace Nop.Plugin.Payments.Square
             //capture transaction for current store
             var storeId = (await _storeContext.GetCurrentStoreAsync()).Id;
             var transactionId = capturePaymentRequest.Order.AuthorizationTransactionId;
-            var (successfullyCompleted, error) = await _squarePaymentManager.CompletePaymentAsync(transactionId, storeId);
+            var completePaymentRequest = new SquareModel.CompletePaymentRequest();
+            var (successfullyCompleted, error) = await _squarePaymentManager.CompletePaymentAsync(transactionId, completePaymentRequest, storeId);
             if (!successfullyCompleted)
                 throw new NopException(error);
 
@@ -507,7 +513,7 @@ namespace Nop.Plugin.Payments.Square
                 throw new NopException(paymentRefundError);
 
             //if refund status is 'pending', try to refund once more with the same request parameters for current store
-            if (paymentRefund.Status == SquarePaymentDefaults.REFUND_STATUS_PENDING)
+            if (paymentRefund.Status == SquarePaymentDefaults.Status.REFUND_PENDING)
             {
                 (paymentRefund, paymentRefundError) = await _squarePaymentManager.RefundPaymentAsync(paymentRefundRequest, storeId);
                 if (paymentRefund == null)
@@ -515,10 +521,10 @@ namespace Nop.Plugin.Payments.Square
             }
 
             //check whether refund is completed
-            if (paymentRefund.Status != SquarePaymentDefaults.REFUND_STATUS_COMPLETED)
+            if (paymentRefund.Status != SquarePaymentDefaults.Status.REFUND_COMPLETED)
             {
                 //change error notification to warning one (for the pending status)
-                if (paymentRefund.Status == SquarePaymentDefaults.REFUND_STATUS_PENDING)
+                if (paymentRefund.Status == SquarePaymentDefaults.Status.REFUND_PENDING)
                     _nopHtmlHelper.AddCssFileParts(@"~/Plugins/Payments.Square/Content/styles.css", null);
 
                 return new RefundPaymentResult { Errors = new[] { $"Refund is {paymentRefund.Status}" }.ToList() };
@@ -649,12 +655,12 @@ namespace Nop.Plugin.Payments.Square
         }
 
         /// <summary>
-        /// Gets a name of a view component for displaying plugin in public store ("payment info" checkout step)
+        /// Gets a type of a view component for displaying plugin in public store ("payment info" checkout step)
         /// </summary>
-        /// <returns>View component name</returns>
-        public string GetPublicViewComponentName()
+        /// <returns>View component type</returns>
+        public Type GetPublicViewComponent()
         {
-            return SquarePaymentDefaults.VIEW_COMPONENT_NAME;
+            return typeof(PaymentSquareViewComponent);
         }
 
         /// <summary>
@@ -672,14 +678,15 @@ namespace Nop.Plugin.Payments.Square
             });
 
             //install renew access token schedule task
-            if (await _scheduleTaskService.GetTaskByTypeAsync(SquarePaymentDefaults.RenewAccessTokenTask) == null)
+            if (await _scheduleTaskService.GetTaskByTypeAsync(SquarePaymentDefaults.RenewAccessTokenTask.Type) == null)
             {
                 await _scheduleTaskService.InsertTaskAsync(new ScheduleTask
                 {
                     Enabled = true,
-                    Seconds = SquarePaymentDefaults.AccessTokenRenewalPeriodRecommended * 24 * 60 * 60,
-                    Name = SquarePaymentDefaults.RenewAccessTokenTaskName,
-                    Type = SquarePaymentDefaults.RenewAccessTokenTask,
+                    Seconds = SquarePaymentDefaults.RenewAccessTokenTask.Period * 24 * 60 * 60,
+                    Name = SquarePaymentDefaults.RenewAccessTokenTask.Name,
+                    Type = SquarePaymentDefaults.RenewAccessTokenTask.Type,
+                    LastEnabledUtc = DateTime.UtcNow
                 });
             }
 
@@ -747,7 +754,7 @@ namespace Nop.Plugin.Payments.Square
             await _settingService.DeleteSettingAsync<SquarePaymentSettings>();
 
             //remove scheduled task
-            var task = await _scheduleTaskService.GetTaskByTypeAsync(SquarePaymentDefaults.RenewAccessTokenTask);
+            var task = await _scheduleTaskService.GetTaskByTypeAsync(SquarePaymentDefaults.RenewAccessTokenTask.Type);
             if (task != null)
                 await _scheduleTaskService.DeleteTaskAsync(task);
 

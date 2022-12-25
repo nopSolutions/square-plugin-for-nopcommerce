@@ -19,7 +19,6 @@ namespace Nop.Plugin.Payments.Square.Components
     /// <summary>
     /// Represents payment info view component
     /// </summary>
-    [ViewComponent(Name = SquarePaymentDefaults.VIEW_COMPONENT_NAME)]
     public class PaymentSquareViewComponent : ViewComponent
     {
         #region Fields
@@ -100,7 +99,8 @@ namespace Nop.Plugin.Payments.Square.Components
             //whether customer already has stored cards in current store
             var storeId = (await _storeContext.GetCurrentStoreAsync()).Id;
             var customerId = await _genericAttributeService
-                .GetAttributeAsync<string>(currentCustomer, SquarePaymentDefaults.CustomerIdAttribute) ?? string.Empty;
+                .GetAttributeAsync<string>(currentCustomer, SquarePaymentDefaults.CustomerIdAttribute)
+                ?? string.Empty;
             var customer = await _squarePaymentManager.GetCustomerAsync(customerId, storeId);
             if (customer?.Cards != null)
             {
@@ -138,7 +138,7 @@ namespace Nop.Plugin.Payments.Square.Components
                 model.BillingCity = billingAddress?.City;
                 model.BillingPostalCode = billingAddress?.ZipPostalCode;
                 model.BillingAddressLine1 = billingAddress?.Address1 ?? string.Empty;
-                model.BillingAddressLine2 = billingAddress?.Address2 ?? string.Empty; 
+                model.BillingAddressLine2 = billingAddress?.Address2 ?? string.Empty;
             }
 
             return View("~/Plugins/Payments.Square/Views/PaymentInfo.cshtml", model);

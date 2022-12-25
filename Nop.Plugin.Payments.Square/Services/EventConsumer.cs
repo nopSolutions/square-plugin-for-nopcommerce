@@ -1,4 +1,5 @@
-﻿using Nop.Services.Events;
+﻿using System.Threading.Tasks;
+using Nop.Services.Events;
 using Nop.Services.Localization;
 using Nop.Services.Payments;
 using Nop.Services.ScheduleTasks;
@@ -43,10 +44,11 @@ namespace Nop.Plugin.Payments.Square.Services
         #region Methods
 
         /// <summary>
-        /// Handle page rendering event
+        /// Handle event
         /// </summary>
-        /// <param name="eventMessage">Event message</param>
-        public async System.Threading.Tasks.Task HandleEventAsync(PageRenderingEvent eventMessage)
+        /// <param name="eventMessage">Event</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task HandleEventAsync(PageRenderingEvent eventMessage)
         {
             //check whether the plugin is active
             if (!await _paymentPluginManager.IsPluginActiveAsync(SquarePaymentDefaults.SystemName))
@@ -62,10 +64,11 @@ namespace Nop.Plugin.Payments.Square.Services
         }
 
         /// <summary>
-        /// Handle model received event
+        /// Handle event
         /// </summary>
-        /// <param name="eventMessage">Event message</param>
-        public async System.Threading.Tasks.Task HandleEventAsync(ModelReceivedEvent<BaseNopModel> eventMessage)
+        /// <param name="eventMessage">Event</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task HandleEventAsync(ModelReceivedEvent<BaseNopModel> eventMessage)
         {
             //whether received model is ScheduleTaskModel
             if (eventMessage?.Model is not ScheduleTaskModel scheduleTaskModel)
@@ -73,15 +76,15 @@ namespace Nop.Plugin.Payments.Square.Services
 
             //whether renew access token task is changed
             var scheduleTask = await _scheduleTaskService.GetTaskByIdAsync(scheduleTaskModel.Id);
-            if (!scheduleTask?.Type.Equals(SquarePaymentDefaults.RenewAccessTokenTask) ?? true)
+            if (!scheduleTask?.Type.Equals(SquarePaymentDefaults.RenewAccessTokenTask.Type) ?? true)
                 return;
 
             //check token renewal limit
             var accessTokenRenewalPeriod = scheduleTaskModel.Seconds / 60 / 60 / 24;
-            if (accessTokenRenewalPeriod > SquarePaymentDefaults.AccessTokenRenewalPeriodMax)
+            if (accessTokenRenewalPeriod > SquarePaymentDefaults.RenewAccessTokenTask.MaxPeriod)
             {
                 var error = string.Format(await _localizationService.GetResourceAsync("Plugins.Payments.Square.AccessTokenRenewalPeriod.Error"),
-                    SquarePaymentDefaults.AccessTokenRenewalPeriodMax, SquarePaymentDefaults.AccessTokenRenewalPeriodRecommended);
+                    SquarePaymentDefaults.RenewAccessTokenTask.MaxPeriod, SquarePaymentDefaults.RenewAccessTokenTask.Period);
                 eventMessage.ModelState.AddModelError(string.Empty, error);
             }
         }
