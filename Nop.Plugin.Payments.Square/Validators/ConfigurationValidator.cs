@@ -3,29 +3,28 @@ using FluentValidation;
 using Nop.Plugin.Payments.Square.Models;
 using Nop.Web.Framework.Validators;
 
-namespace Nop.Plugin.Payments.Square.Validators
+namespace Nop.Plugin.Payments.Square.Validators;
+
+/// <summary>
+/// Represents validator of configuration model
+/// </summary>
+public class ConfigurationModelValidator : BaseNopValidator<ConfigurationModel>
 {
-    /// <summary>
-    /// Represents validator of configuration model
-    /// </summary>
-    public class ConfigurationModelValidator : BaseNopValidator<ConfigurationModel>
+    #region Ctor
+
+    public ConfigurationModelValidator()
     {
-        #region Ctor
+        //rules for sandbox credentials
+        RuleFor(model => model.SandboxAccessToken)
+            .Must((model, name) => !string.IsNullOrEmpty(model.SandboxAccessToken))
+            .WithMessage("Sandbox access token should not be empty")
+            .When(model => model.UseSandbox);
 
-        public ConfigurationModelValidator()
-        {
-            //rules for sandbox credentials
-            RuleFor(model => model.SandboxAccessToken)
-                .Must((model, name) => !string.IsNullOrEmpty(model.SandboxAccessToken))
-                .WithMessage("Sandbox access token should not be empty")
-                .When(model => model.UseSandbox);
-
-            RuleFor(model => model.SandboxApplicationId)
-                .Must((model, name) => model.SandboxApplicationId?.StartsWith(SquarePaymentDefaults.SandboxCredentialsPrefix, StringComparison.InvariantCultureIgnoreCase) ?? false)
-                .WithMessage($"Sandbox application ID should start with '{SquarePaymentDefaults.SandboxCredentialsPrefix}'")
-                .When(model => model.UseSandbox);
-        }
-
-        #endregion
+        RuleFor(model => model.SandboxApplicationId)
+            .Must((model, name) => model.SandboxApplicationId?.StartsWith(SquarePaymentDefaults.SandboxCredentialsPrefix, StringComparison.InvariantCultureIgnoreCase) ?? false)
+            .WithMessage($"Sandbox application ID should start with '{SquarePaymentDefaults.SandboxCredentialsPrefix}'")
+            .When(model => model.UseSandbox);
     }
+
+    #endregion
 }

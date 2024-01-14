@@ -1,19 +1,18 @@
 
-namespace Nop.Plugin.Payments.Square.Domain
+namespace Nop.Plugin.Payments.Square.Domain;
+
+/// <summary>
+/// Represents payment transaction mode enumeration
+/// </summary>
+public enum TransactionMode
 {
     /// <summary>
-    /// Represents payment transaction mode enumeration
+    /// Authorize
     /// </summary>
-    public enum TransactionMode
-    {
-        /// <summary>
-        /// Authorize
-        /// </summary>
-        Authorize = 0,
+    Authorize = 0,
 
-        /// <summary>
-        /// Charge (authorize and capture)
-        /// </summary>
-        Charge = 2
-    }
+    /// <summary>
+    /// Charge (authorize and capture)
+    /// </summary>
+    Charge = 2
 }
